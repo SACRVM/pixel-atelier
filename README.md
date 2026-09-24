@@ -12,8 +12,8 @@ npx serve .
 ## What it does
 
 The editor of the Atelier, the sprite studio of BunnyBot's web app, as a
-standalone app. The canvas fills the screen. **Tools**, **Palette** and
-**Preview** are floating windows over it: drag them where you want them,
+standalone app. The canvas fills the screen. **Tools**, **Selection**,
+**Palette** and **Preview** are floating windows over it: drag them where you want them,
 close them, and bring them back from the top bar.
 
 - **Tools:** pencil, eraser, line, rectangle and ellipse (outline or filled),
@@ -28,8 +28,8 @@ close them, and bring them back from the top bar.
 - **Palette:** DawnBringer 32, or *Used* for the sprite's own colors, most
   used first.
 
-The UI is German. Language switching is planned as one solution for all
-SACRVM APPKIT apps.
+Language switching is planned as one solution for all SACRVM APPKIT apps;
+until then the UI is English.
 
 ## Files
 
