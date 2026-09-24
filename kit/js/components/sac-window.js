@@ -35,6 +35,16 @@
  *                         methods stay callable regardless.
  *             no-resize — boolean; hides the resize handle and disables
  *                         resizing. Dragging is unaffected.
+ *             snap      — edge snapping while dragging. Within 12px of a
+ *                         viewport edge (the top edge = below the nav
+ *                         ribbon) the window snaps to it, keeping a gap of
+ *                         the attribute's value (snap="14" → 14px; bare
+ *                         `snap` → 8px, the maximized inset). Dropped
+ *                         snapped to the right and/or bottom edge, the
+ *                         window is ANCHORED there again (right / bottom),
+ *                         so it follows browser resizes like a freshly
+ *                         placed one; snapped left / top it keeps left / top.
+ *                         Dropped free, it is a plain position as before.
  * Methods:    open(), close(), toggle(), bringToFront()
  *             (z-index walk over all sac-windows, base 10000),
  *             minimize(), maximize(), restore()
@@ -50,6 +60,10 @@
  *             clamp runs after every drag and on window resize: at least 40px
  *             of the window stays horizontally in view, and the title bar
  *             stays between the nav ribbon and the bottom edge.
+ *
+ * Showing a window (open) pushes it WHOLLY into view — below the nav
+ * ribbon, inside the viewport; one larger than the viewport shows its
+ * top-left, title bar first.
  *
  * Double-clicking the title bar toggles maximize / restore.
  *
@@ -108,6 +122,7 @@ class SacWindow extends HTMLElement {
     static NAV_HEIGHT = 50;
     static MAX_INSET = 8;
     static MIN_VISIBLE = 40;
+    static SNAP = 12;             // edge-snapping distance while dragging
 
     static get observedAttributes() {
         return ['title', 'width', 'height', 'top', 'left', 'right', 'bottom', 'open', 'minimized', 'maximized'];
@@ -123,6 +138,7 @@ class SacWindow extends HTMLElement {
         window.addEventListener('resize', this._onViewportResize);
         this._mq.addEventListener('change', this._onCompactChange);
         this._syncCompact();
+        if (this.hasAttribute('open')) this._fitIntoView();
     }
 
     disconnectedCallback() {
@@ -152,7 +168,7 @@ class SacWindow extends HTMLElement {
         if (this.shadowRoot.innerHTML === '') return;
 
         if (name === 'open') {
-            if (newValue !== null) this._syncCompact();
+            if (newValue !== null) { this._syncCompact(); this._fitIntoView(); }
             return;
         }
 
@@ -472,6 +488,32 @@ class SacWindow extends HTMLElement {
         }
     }
 
+    /** The gap a snapped window keeps from the edge: snap="14" → 14. */
+    _snapGap() {
+        const v = parseFloat(this.getAttribute('snap'));
+        return Number.isFinite(v) && v >= 0 ? v : SacWindow.MAX_INSET;
+    }
+
+    /** While dragging: pull _dx/_dy onto an edge line within SNAP px. */
+    _snapDrag() {
+        const T = SacWindow.SNAP;
+        const gap = this._snapGap();
+        const vw = document.documentElement.clientWidth;
+        const vh = document.documentElement.clientHeight;
+        const nav = this._navBottom();
+        const w = this._dragW, h = this._dragH;
+        let left = this.startLeft + this._dx;
+        let top = this.startTop + this._dy;
+        const snap = {};
+        if (Math.abs(left - gap) <= T) { left = gap; snap.x = 'left'; }
+        else if (Math.abs(left + w - (vw - gap)) <= T) { left = vw - gap - w; snap.x = 'right'; }
+        if (Math.abs(top - (nav + gap)) <= T) { top = nav + gap; snap.y = 'top'; }
+        else if (Math.abs(top + h - (vh - gap)) <= T) { top = vh - gap - h; snap.y = 'bottom'; }
+        this._dx = left - this.startLeft;
+        this._dy = top - this.startTop;
+        this._snapped = snap;
+    }
+
     /** Is the window held by its right / bottom edge right now? */
     _anchoredX() { return this.style.right !== '' && this.style.right !== 'auto'; }
     _anchoredY() { return this.style.bottom !== '' && this.style.bottom !== 'auto'; }
@@ -539,6 +581,9 @@ class SacWindow extends HTMLElement {
             const rect = this.getBoundingClientRect();
             this.startLeft = rect.left;
             this.startTop = rect.top;
+            this._dragW = rect.width;
+            this._dragH = rect.height;
+            this._snapped = null;
             // A drag is a compositor move: the window rides a transform on
             // its own layer — no layout, no repaint of the glass blur and
             // the big shadow per mouse event, which is what made it trail
@@ -570,6 +615,7 @@ class SacWindow extends HTMLElement {
             if (this.isDragging) {
                 this._dx = e.clientX - this.startX;
                 this._dy = e.clientY - this.startY;
+                if (this.hasAttribute('snap')) this._snapDrag();
                 this.style.transform = `translate3d(${this._dx}px, ${this._dy}px, 0)`;
             }
             if (this.isResizing) {
@@ -584,8 +630,14 @@ class SacWindow extends HTMLElement {
             const wasDragging = this.isDragging;
             if (wasDragging) {
                 // Commit the transform to the real position, then drop it.
-                this.style.left = `${Math.round(this.startLeft + (this._dx || 0))}px`;
-                this.style.top = `${Math.round(this.startTop + (this._dy || 0))}px`;
+                // Snapped to the right / bottom edge = anchored there again.
+                const snap = this._snapped || {};
+                const gap = `${this._snapGap()}px`;
+                if (snap.x === 'right') { this.style.left = 'auto'; this.style.right = gap; }
+                else { this.style.left = `${Math.round(this.startLeft + (this._dx || 0))}px`; this.style.right = ''; }
+                if (snap.y === 'bottom') { this.style.top = 'auto'; this.style.bottom = gap; }
+                else { this.style.top = `${Math.round(this.startTop + (this._dy || 0))}px`; this.style.bottom = ''; }
+                this._snapped = null;
                 this.style.transform = '';
                 this.style.willChange = '';
                 this._dx = this._dy = 0;
@@ -764,6 +816,32 @@ class SacWindow extends HTMLElement {
         if (this._normalRect) {
             this._normalRect.left = this.style.left;
             this._normalRect.top = this.style.top;
+        }
+    }
+
+    /**
+     * On show: the WHOLE window comes into view, not just the 40px the drag
+     * clamp guarantees — a window placed for a bigger screen, or opened after
+     * the browser shrank, is pushed in (below the nav ribbon). One larger
+     * than the viewport shows its top-left, title bar first. An anchored
+     * axis that already fits is left alone.
+     */
+    _fitIntoView() {
+        if (!this.isConnected || this._windowState !== 'normal') return;
+        const rect = this.getBoundingClientRect();
+        if (!rect.width && !rect.height) return;
+        const nav = this._navBottom();
+        const vw = document.documentElement.clientWidth;
+        const vh = document.documentElement.clientHeight;
+        const left = Math.max(0, Math.min(rect.left, vw - rect.width));
+        const top = Math.max(nav, Math.min(rect.top, vh - rect.height));
+        if (Math.round(left) !== Math.round(rect.left)) {
+            this.style.left = `${Math.round(left)}px`;
+            this.style.right = '';
+        }
+        if (Math.round(top) !== Math.round(rect.top)) {
+            this.style.top = `${Math.round(top)}px`;
+            this.style.bottom = '';
         }
     }
 
