@@ -494,8 +494,10 @@
             this._restore();   // async: the last session, if there is one
 
             // The Atelier's places: tools top-left, palette top-right,
-            // preview bottom-right of the canvas.
-            requestAnimationFrame(() => this._placeWindows());
+            // preview bottom-right of the canvas — measured once app.css is
+            // in: on a cold load (a desktop fetches it from the app's own
+            // origin) the first frame still has the unstyled layout.
+            this._whenStyled().then(() => requestAnimationFrame(() => this._placeWindows()));
 
             // Write a pending autosave at once when the tab goes to the
             // background (or the app unmounts, below): there the async write
@@ -677,6 +679,15 @@
                 this._renderPreview();
             }
         }
+        /** Resolves once the app's stylesheet has loaded (or failed to). */
+        _whenStyled() {
+            const link = document.getElementById(CSS_ID);
+            if (!link || link.sheet) return Promise.resolve();
+            return new Promise((resolve) => {
+                link.addEventListener("load", resolve, { once: true });
+                link.addEventListener("error", resolve, { once: true });
+            });
+        }
         /**
          * The two places that depend on measured sizes: selection sits under
          * tools, preview above the frame bar. Everything else is anchored in
@@ -686,9 +697,13 @@
             // Sizes, not screen positions: the frame bar always sits at the
             // viewport's bottom edge, and tools always starts at top="64px" —
             // true however (and whenever) the host lays the app out.
-            const gap = 14, toolsH = this._win("tools").offsetHeight || 160;
+            // Only plausible sizes count: a window or bar measured as 0 (not
+            // laid out) or taller than any real one falls back to its usual size.
+            const gap = 14, sane = (v, usual, max) => (v > 0 && v <= max ? v : usual);
+            const toolsH = sane(this._win("tools").offsetHeight, 170, 400);
+            const filmH = sane(this.$film.offsetHeight, 80, 200);
             this._win("selection").setAttribute("top", (64 + toolsH + gap) + "px");
-            this._win("preview").setAttribute("bottom", ((this.$film.offsetHeight || 80) + gap) + "px");
+            this._win("preview").setAttribute("bottom", (filmH + gap) + "px");
         }
 
         /* ---------------------------------------------------- document ---- */
