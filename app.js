@@ -128,33 +128,46 @@
             const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
             for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) raster.stamp(doc, buf, x, y, size, c);
         },
-        // Gap-free outline: scan every column AND every row for the boundary.
-        ellipse(doc, buf, a, b, size, c) {
-            const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
-            const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, rx = (x1 - x0) / 2, ry = (y1 - y0) / 2;
-            if (rx < 0.5) { for (let y = y0; y <= y1; y++) raster.stamp(doc, buf, Math.round(cx), y, size, c); return; }
-            if (ry < 0.5) { for (let x = x0; x <= x1; x++) raster.stamp(doc, buf, x, Math.round(cy), size, c); return; }
-            for (let x = x0; x <= x1; x++) {
-                const d = (x - cx) / rx; if (Math.abs(d) > 1) continue;
-                const e = ry * Math.sqrt(1 - d * d);
-                raster.stamp(doc, buf, x, Math.round(cy - e), size, c); raster.stamp(doc, buf, x, Math.round(cy + e), size, c);
+        /**
+         * The outline of the ellipse inscribed in the rectangle a–b, as
+         * points — Alois Zingl's midpoint algorithm (integers only). Every
+         * step plots all four quadrants at once, so the shape is mirror-
+         * symmetric by construction, even and odd sizes alike.
+         */
+        ellipsePoints(a, b) {
+            const pts = [], plot = (x, y) => pts.push([x, y]);
+            let x0 = a.x, y0 = a.y, x1 = b.x, y1 = b.y;
+            let w = Math.abs(x1 - x0), h = Math.abs(y1 - y0), h1 = h & 1;
+            let dx = 4 * (1 - w) * h * h, dy = 4 * (h1 + 1) * w * w;
+            let err = dx + dy + h1 * w * w, e2;
+            if (x0 > x1) { x0 = x1; x1 += w; }
+            if (y0 > y1) y0 = y1;
+            y0 += (h + 1) >> 1;
+            y1 = y0 - h1;
+            const ww = 8 * w * w, hh = 8 * h * h;
+            do {
+                plot(x1, y0); plot(x0, y0); plot(x0, y1); plot(x1, y1);
+                e2 = 2 * err;
+                if (e2 <= dy) { y0++; y1--; dy += ww; err += dy; }
+                if (e2 >= dx || 2 * err > dy) { x0++; x1--; dx += hh; err += dx; }
+            } while (x0 <= x1);
+            while (y0 - y1 <= h) {                  // a flat ellipse: finish the tips
+                plot(x0 - 1, y0); plot(x1 + 1, y0++);
+                plot(x0 - 1, y1); plot(x1 + 1, y1--);
             }
-            for (let y = y0; y <= y1; y++) {
-                const d = (y - cy) / ry; if (Math.abs(d) > 1) continue;
-                const e = rx * Math.sqrt(1 - d * d);
-                raster.stamp(doc, buf, Math.round(cx - e), y, size, c); raster.stamp(doc, buf, Math.round(cx + e), y, size, c);
-            }
+            return pts;
         },
-        // Filled: each row between its two x-solutions.
+        ellipse(doc, buf, a, b, size, c) {
+            for (const [x, y] of raster.ellipsePoints(a, b)) raster.stamp(doc, buf, x, y, size, c);
+        },
+        // Filled: every row between the outline's leftmost and rightmost point.
         ellipsefill(doc, buf, a, b, size, c) {
-            const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
-            const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, rx = (x1 - x0) / 2, ry = (y1 - y0) / 2;
-            if (rx < 0.5 || ry < 0.5) return raster.ellipse(doc, buf, a, b, size, c);
-            for (let y = y0; y <= y1; y++) {
-                const d = (y - cy) / ry; if (Math.abs(d) > 1) continue;
-                const e = rx * Math.sqrt(1 - d * d);
-                for (let x = Math.round(cx - e); x <= Math.round(cx + e); x++) raster.stamp(doc, buf, x, y, size, c);
+            const rows = new Map();
+            for (const [x, y] of raster.ellipsePoints(a, b)) {
+                const r = rows.get(y);
+                if (!r) rows.set(y, [x, x]); else { r[0] = Math.min(r[0], x); r[1] = Math.max(r[1], x); }
             }
+            for (const [y, [xa, xb]] of rows) for (let x = xa; x <= xb; x++) raster.stamp(doc, buf, x, y, size, c);
         },
         fill(doc, buf, x, y, c) {
             const t = doc.get(buf, x, y);
