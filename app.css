@@ -42,17 +42,14 @@ app-pixel-atelier .pa-lbl {
 }
 /* Selection actions: one row of icons, spread over the window's width. */
 app-pixel-atelier .pa-icons {
-    /* Same measure as the tool box above (sac-toolbox: 32px, 18px icon; 44px on touch)… */
-    --icon-btn-size: 32px;
-    --icon-btn-icon: 18px;
-    /* …and the same grid (sac-toolbox columns="auto": 4px gap), so the two rows line up. */
+    /* The tool box's grid (columns="auto", 4px gap) with the kit's tool measure,
+       so the two rows line up column for column. */
     display: grid;
-    grid-template-columns: repeat(auto-fill, var(--icon-btn-size));
+    grid-template-columns: repeat(auto-fill, var(--tool-btn-size));
     gap: 4px;
 }
-@media (pointer: coarse) {
-    app-pixel-atelier .pa-icons { --icon-btn-size: 44px; }
-}
+/* Tool palettes: the kit's tight window padding. */
+app-pixel-atelier .pa-win { --window-padding: 8px; }
 /* Preview: play and the zoom steps on one line. */
 app-pixel-atelier .pa-pvrow { flex-wrap: nowrap; }
 app-pixel-atelier .pa-pvstage {

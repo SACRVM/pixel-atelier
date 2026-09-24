@@ -53,14 +53,6 @@
         { id: "pick",        icon: "eyedropper",  label: "Eyedropper",            key: "i" },
         { id: "select",      icon: "marquee",     label: "Select · move",         key: "m" },
     ];
-    // Paste and crop are not in the kit's icon set yet — requested from the
-    // appkit; registered through its documented extension point until then.
-    if (!sac.icons.has("paste")) {
-        sac.icons.register("paste", '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>');
-    }
-    if (!sac.icons.has("crop")) {
-        sac.icons.register("crop", '<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/>');
-    }
     const SHAPES = new Set(["line", "rect", "rectfill", "ellipse", "ellipsefill"]);
     const BRUSHED = new Set(["pencil", "eraser", "line", "rect", "rectfill", "ellipse", "ellipsefill"]);
 
@@ -376,8 +368,8 @@
         <sac-pixel-canvas class="pa-canvas"></sac-pixel-canvas>
         <sac-hud class="pa-hud" position="bottom-left"><span class="pa-meta"></span><span class="pa-coords"></span></sac-hud>
 
-        <sac-window class="pa-win" data-win="tools" title="Tools"
-                    width="252px" height="auto" controls="close" open>
+        <sac-window class="pa-win" data-win="tools" title="Tools" left="14px" top="64px"
+                    width="232px" height="auto" controls="close" open>
             <div class="pa-winbody">
                 <sac-toolbox class="pa-tools" columns="auto" group="Tools" value="pencil"></sac-toolbox>
                 <div class="pa-row"><span class="pa-lbl">Brush</span>
@@ -387,21 +379,21 @@
             </div>
         </sac-window>
 
-        <sac-window class="pa-win" data-win="selection" title="Selection"
-                    width="252px" height="auto" controls="close" open>
+        <sac-window class="pa-win" data-win="selection" title="Selection" left="14px"
+                    width="232px" height="auto" controls="close" open>
             <div class="pa-winbody">
                 <div class="pa-icons">
-                    <button type="button" class="icon-btn pa-fliph" title="Flip horizontal (Shift+H)"><sac-icon name="flip-h"></sac-icon></button>
-                    <button type="button" class="icon-btn pa-flipv" title="Flip vertical (Shift+V)"><sac-icon name="flip-v"></sac-icon></button>
-                    <button type="button" class="icon-btn pa-copyb" title="Copy (Ctrl+C)"><sac-icon name="copy"></sac-icon></button>
-                    <button type="button" class="icon-btn pa-cutb" title="Cut (Ctrl+X)"><sac-icon name="scissors"></sac-icon></button>
-                    <button type="button" class="icon-btn pa-pasteb" title="Paste in place (Ctrl+V)"><sac-icon name="paste"></sac-icon></button>
-                    <button type="button" class="icon-btn pa-trimb" title="Trim the selection to its object"><sac-icon name="crop"></sac-icon></button>
+                    <button type="button" class="icon-btn tool pa-fliph" title="Flip horizontal (Shift+H)"><sac-icon name="flip-h"></sac-icon></button>
+                    <button type="button" class="icon-btn tool pa-flipv" title="Flip vertical (Shift+V)"><sac-icon name="flip-v"></sac-icon></button>
+                    <button type="button" class="icon-btn tool pa-copyb" title="Copy (Ctrl+C)"><sac-icon name="copy"></sac-icon></button>
+                    <button type="button" class="icon-btn tool pa-cutb" title="Cut (Ctrl+X)"><sac-icon name="scissors"></sac-icon></button>
+                    <button type="button" class="icon-btn tool pa-pasteb" title="Paste in place (Ctrl+V)"><sac-icon name="paste"></sac-icon></button>
+                    <button type="button" class="icon-btn tool pa-trimb" title="Trim the selection to its object"><sac-icon name="crop"></sac-icon></button>
                 </div>
             </div>
         </sac-window>
 
-        <sac-window class="pa-win" data-win="palette" title="Palette"
+        <sac-window class="pa-win" data-win="palette" title="Palette" right="14px" top="64px"
                     width="232px" height="auto" controls="close" open>
             <div class="pa-winbody">
                 <sac-segmented-control class="pa-palmode" value="all">
@@ -412,8 +404,8 @@
             </div>
         </sac-window>
 
-        <sac-window class="pa-win" data-win="preview" title="Preview"
-                    width="280px" height="auto" controls="close" open>
+        <sac-window class="pa-win" data-win="preview" title="Preview" right="14px"
+                    width="256px" height="auto" controls="close" open>
             <div class="pa-winbody">
                 <div class="pa-pvstage"><sac-pixel-canvas class="pa-pv" static zoom="3"></sac-pixel-canvas></div>
                 <div class="pa-row pa-pvrow">
@@ -432,6 +424,21 @@
             <button type="button" class="icon-btn pa-onion active" title="Onion skin (O)"><sac-icon name="onion"></sac-icon></button>
         </div>
     </sac-filmstrip>
+
+    <sac-menu class="pa-ctx">
+        <button data-action="copy"><sac-icon name="copy"></sac-icon> Copy</button>
+        <button data-action="cut"><sac-icon name="scissors"></sac-icon> Cut</button>
+        <button data-action="paste"><sac-icon name="paste"></sac-icon> Paste</button>
+        <hr>
+        <button data-action="flip-h"><sac-icon name="flip-h"></sac-icon> Flip horizontal</button>
+        <button data-action="flip-v"><sac-icon name="flip-v"></sac-icon> Flip vertical</button>
+        <button data-action="trim"><sac-icon name="crop"></sac-icon> Trim selection</button>
+        <button data-action="select-all"><sac-icon name="marquee"></sac-icon> Select whole frame</button>
+        <hr>
+        <button data-action="dup-frame"><sac-icon name="copy"></sac-icon> Duplicate frame</button>
+        <button data-action="add-frame"><sac-icon name="plus"></sac-icon> Add frame</button>
+        <button data-action="delete-frame" data-danger><sac-icon name="trash"></sac-icon> Delete frame</button>
+    </sac-menu>
 </div>`;
         }
 
@@ -498,15 +505,16 @@
         }
 
         _bindKeys() {
-            const k = (combo, fn, description, group) =>
-                this._offs.push(sac.hotkeys.register(combo, fn, { description, group }));
-            k("mod+z", () => this._undo(), "Undo", "Edit");
-            k("mod+shift+z", () => this._redo(), "Redo", "Edit");
-            k("mod+y", () => this._redo(), "Redo", "Edit");
+            // skipInInput: combos that also edit text stay the text field's own while typing.
+            const k = (combo, fn, description, group, skipInInput) =>
+                this._offs.push(sac.hotkeys.register(combo, fn, { description, group, skipInInput }));
+            k("mod+z", () => this._undo(), "Undo", "Edit", true);
+            k("mod+shift+z", () => this._redo(), "Redo", "Edit", true);
+            k("mod+y", () => this._redo(), "Redo", "Edit", true);
             k("mod+s", () => this._save(false), "Save", "File");
             k("mod+shift+s", () => this._save(true), "Save as…", "File");
             k("mod+o", () => this._open(), "Open…", "File");
-            k("mod+a", () => this._selectAllFrame(), "Select the whole frame", "Selection");
+            k("mod+a", () => this._selectAllFrame(), "Select the whole frame", "Selection", true);
             k("shift+h", () => this._flip("h"), "Flip horizontal", "Selection");
             k("shift+v", () => this._flip("v"), "Flip vertical", "Selection");
             k("escape", () => this._escape(), "Drop the selection", "Selection");
@@ -604,9 +612,21 @@
             c.addEventListener("sac:pixel-cancel", () => this._cancel());
             c.addEventListener("sac:pixel-hover", (e) => this._hover(e.detail));
             c.addEventListener("sac:zoom", () => this._syncMeta());
-            // The Atelier's right-click menu waits on the kit (a <sac-menu>
-            // that opens at a point); until then the browser menu stays off.
-            c.addEventListener("contextmenu", (e) => e.preventDefault());
+            // Right-click: the Atelier's context menu, at the pointer.
+            const ctx = this.querySelector(".pa-ctx");
+            c.addEventListener("contextmenu", (e) => { e.preventDefault(); ctx.openAt(e); });
+            ctx.addEventListener("sac:select", (e) => ({
+                "copy": () => this._copy(),
+                "cut": () => this._cut(),
+                "paste": () => this._paste(),
+                "flip-h": () => this._flip("h"),
+                "flip-v": () => this._flip("v"),
+                "trim": () => this._trimSel(),
+                "select-all": () => this._selectAllFrame(),
+                "dup-frame": () => this._dupFrame(),
+                "add-frame": () => this._addFrame(),
+                "delete-frame": () => this._deleteFrame(),
+            })[e.detail.action]?.());
         }
 
         /* ---------------------------------------------- floating windows -- */
@@ -626,22 +646,16 @@
                 this._renderPreview();
             }
         }
-        /** First placement: tools and selection top-left, palette top-right, preview bottom-right of the canvas area. */
+        /**
+         * The two places that depend on measured sizes: selection sits under
+         * tools, preview above the frame bar. Everything else is anchored in
+         * the markup, and the kit keeps right/bottom anchors on resize.
+         */
         _placeWindows() {
-            // The nav ribbon is fixed and overlays the top of the body.
-            const r = this.querySelector(".pa-body").getBoundingClientRect(), pad = 14;
-            const top = Math.max(r.top, this.querySelector("sac-nav").getBoundingClientRect().bottom);
-            const put = (name, left, top) => {
-                const w = this._win(name);
-                w.setAttribute("left", Math.round(left) + "px");
-                w.setAttribute("top", Math.round(top) + "px");
-            };
-            const pw = this._win("palette").offsetWidth || 232, vw = this._win("preview").offsetWidth || 280;
-            const ph = this._win("preview").offsetHeight || 220;
-            put("tools", r.left + pad, top + pad);
-            put("selection", r.left + pad, top + pad + (this._win("tools").offsetHeight || 160) + pad);
-            put("palette", r.right - pw - pad, top + pad);
-            put("preview", r.right - vw - pad, Math.max(top + pad, r.bottom - ph - pad));
+            const tools = this._win("tools"), gap = 14;
+            this._win("selection").setAttribute("top", Math.round(tools.getBoundingClientRect().bottom + gap) + "px");
+            const bottom = window.innerHeight - this.$film.getBoundingClientRect().top + gap;
+            this._win("preview").setAttribute("bottom", Math.round(bottom) + "px");
         }
 
         /* ---------------------------------------------------- document ---- */
