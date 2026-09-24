@@ -30,7 +30,7 @@
     const MAX_FRAMES = 256;
     const CHUNK_KEY = "pixel-atelier"; // the PNG tEXt keyword
     const CLIP_MARK = "pixel-atelier/clip";
-    const AUTOSAVE_MS = 1500;
+    const AUTOSAVE_MS = 300;    // after a finished stroke/command, not per pointer move
 
     // DawnBringer 32 — a user's colours, DATA, not theme. A file may carry its own.
     const DEFAULT_PALETTE = [
@@ -486,6 +486,7 @@
             this._offs = [];
 
             this.$tools.tools = TOOLS;
+            this._restoring = true;   // no settings writes until the saved ones are read
             this._wire();
             this._load(blankDoc(32, 32, 1), null, null);
             this._setTool("pencil");
@@ -496,6 +497,14 @@
             // preview bottom-right of the canvas.
             requestAnimationFrame(() => this._placeWindows());
 
+            // Write a pending autosave at once when the tab goes to the
+            // background (or the app unmounts, below): there the async write
+            // still completes. A page that is being unloaded cannot finish one
+            // — the short delay above is what keeps that window small.
+            this._flush = () => { if (this._autosaveT) { clearTimeout(this._autosaveT); this._autosaveT = null; this._autosave(); } };
+            this._onHide = () => { if (document.visibilityState === "hidden") this._flush(); };
+            document.addEventListener("visibilitychange", this._onHide);
+
             this._io = new IntersectionObserver((es) => this._setVisible(es[es.length - 1].isIntersecting));
             this._io.observe(this);
         }
@@ -503,7 +512,8 @@
         onUnmount() {
             this._setVisible(false);
             this._io?.disconnect();
-            clearTimeout(this._autosaveT);
+            document.removeEventListener("visibilitychange", this._onHide);
+            this._flush();
         }
 
         /** Hotkeys are global, so they exist only while the app is looked at. */
@@ -686,6 +696,7 @@
         /** Take a sprite in: every piece of per-document state starts over. */
         _load(doc, file, savedBlob) {
             this._stopPlay();
+            this._pvStop(true);   // restarted below (_buildFilm) at the new sprite's speed
             this.doc = doc;
             this.frame = 0;
             this.sel = null; this.float = null;
@@ -702,7 +713,6 @@
             this._render();
             this.$canvas.fit();
             this._syncMeta();
-            if (this._pvTimer) { this._pvStop(true); this._pvStart(); }
         }
 
         _buf() { return this.doc.frames[this.frame]; }
@@ -1036,6 +1046,7 @@
             this._thumbs.forEach((c, i) => c.getContext("2d").putImageData(this.doc.image(i), 0, 0));
             this.$film.frames = this._thumbs;
             this._syncFilm();
+            this._syncPvClock();
         }
         _syncFilm() {
             this.$film.value = this.frame;
@@ -1072,6 +1083,14 @@
             if (this._pvWanted) this._pvStop(); else this._pvStart();
             this._renderPreview();
             this._saveSettings();
+        }
+        /** The frame count changed: run the preview's clock iff it has something to animate. */
+        _syncPvClock() {
+            if (!(this._pvFrame < this.doc.frames.length)) this._pvFrame = 0;
+            const run = this._pvWanted && this._visible && this.doc.frames.length > 1 && this._win("preview").hasAttribute("open");
+            if (run && !this._pvTimer) this._pvStart();
+            else if (!run && this._pvTimer) this._pvStop(true);
+            this._pvIcon();
         }
         _pvIcon() { this._playIcon(".pa-pvplay", !!this._pvWanted && this.doc && this.doc.frames.length > 1); }
         /** Playback speed — the sprite's own, saved with it. Both clocks follow. */
@@ -1211,7 +1230,7 @@
         /** The sprite changed: autosave into the app's own drawer, soon. */
         _touch() {
             clearTimeout(this._autosaveT);
-            this._autosaveT = setTimeout(() => this._autosave(), AUTOSAVE_MS);
+            this._autosaveT = setTimeout(() => { this._autosaveT = null; this._autosave(); }, AUTOSAVE_MS);
         }
         async _autosave() {
             const fs = this._ctx.fs;
@@ -1235,8 +1254,8 @@
         /** Bring back the last session: settings, and the sprite as it was left. */
         async _restore() {
             const fs = this._ctx.fs;
-            if (!fs) return;
-            this._restoring = true;
+            if (!fs) { this._restoring = false; return; }
+            const startDoc = this.doc;   // the blank sprite this session began with
             try {
                 const s = await fs.read("settings", null);
                 if (s) {
@@ -1250,9 +1269,9 @@
                 }
                 const session = await fs.read("session", null);
                 const blob = session && await fs.read("autosave.png", null);
-                if (blob instanceof Blob && !this.undo.length) {
+                if (blob instanceof Blob && this.doc === startDoc && !this.undo.length) {
                     const res = await decodeFile(blob);
-                    if (res.meta) {
+                    if (res.meta && this.doc === startDoc && !this.undo.length) {
                         this._load(docFromStrip(res, res.meta.frames), session.name ? { name: session.name, handle: null } : null, null);
                         if (session.dirty) { this._setDirty(true); this._toast("Unsaved work restored"); }
                     }
