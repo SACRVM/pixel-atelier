@@ -22,14 +22,27 @@ Firebase, no auth, no Cloud Storage, no farm manifest, no sprite catalog of a
 particular game. Identity comes from `context.identity`, files from the kit's
 file layer.
 
-## Open / save — waits on the kit
+## Open / save — the kit's file layer (appkit 2.8.0+)
 
-Opening and saving go through the kit's file layer, which is being built in
-the appkit for this app (planned 2.8.0: binary files, IndexedDB default
-backend, a user file space a host can provide, open/save dialogs with a
-browser fallback when standalone, and an unsaved-changes guard). **Do not
-invent a storage layer here** — if the kit is missing something, route it to
-the appkit via Firepit instead of working around it.
+The appkit built its file layer for this app; use it, do not invent one here.
+
+- **The user's files:** `context.files.open({ accept })` and
+  `context.files.save(blob, { name, handle })` → `{ name, file, handle }` or
+  `null` (cancelled). Keep the `handle`: passing it back is **Save** (no
+  dialog), omitting it is **Save as…**. Standalone this is the device (File
+  System Access API, else input + download); on a desktop it is whatever the
+  host installed — usually `sac.files.virtual()`, the desktop's shared file
+  space. The app never branches on which.
+- **The app's own drawer:** `context.fs` — settings, recent files, autosave.
+  It stores Blobs too (read back as a File).
+- **Unsaved work:** `context.setDirty(true)` on the first edit,
+  `setDirty(false)` after a successful save.
+- The appkit's Pixel Lab demo (`demo/pixel-lab/app.js`, `_open` / `_save`) is
+  the working reference; the style guide documents `sac.files`,
+  `<sac-file-browser>` and the rest.
+
+If the kit is missing something, route it to the appkit via Firepit instead of
+working around it here.
 
 ## The shape (same as every kit app)
 
