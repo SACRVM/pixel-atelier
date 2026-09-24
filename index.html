@@ -22,6 +22,11 @@
         // before it opens you (all.js injects its scripts, and injected
         // scripts do not hold up DOMContentLoaded).
         function loadApp() {
+            // Stand in for a desktop the way the appkit's own hub does: Open /
+            // Save go to the kit's shared file space (the device one click
+            // away), not straight to the disk. The app itself never knows.
+            sac.files.use(sac.files.virtual({ pixelated: true }));
+
             const s = document.createElement("script");
             s.src = "app.js";
             document.head.appendChild(s);

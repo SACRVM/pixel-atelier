@@ -48,8 +48,10 @@ chunk (`pixel-atelier`). Other programs simply ignore the chunk.
 When you open any other image, the app asks how many frames sit side by side
 in it.
 
-Open and save go through the kit's file layer: standalone this is your device,
-on a desktop it is the host's file space. The app also autosaves your work in
+Open and save go through the kit's file layer. On a SACRVM desktop they use
+whatever file space the desktop provides. The standalone page does the same
+as the appkit's own hub: a shared file space in the browser, with "this
+device" one click away in the same dialog. The app also autosaves your work in
 its own storage and restores it on the next start.
 
 ## Shape
