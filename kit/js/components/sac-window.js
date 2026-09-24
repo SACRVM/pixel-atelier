@@ -123,6 +123,8 @@ class SacWindow extends HTMLElement {
     static MAX_INSET = 8;
     static MIN_VISIBLE = 40;
     static SNAP = 12;             // edge-snapping distance while dragging
+    static Z_BASE = 10000;        // the window band: above the page …
+    static Z_MAX = 18999;         // … below the open nav (19000) and dialogs (20000)
 
     static get observedAttributes() {
         return ['title', 'width', 'height', 'top', 'left', 'right', 'bottom', 'open', 'minimized', 'maximized'];
@@ -226,12 +228,22 @@ class SacWindow extends HTMLElement {
         this._setState('normal');
     }
 
+    /**
+     * Windows stack in their own band, 10000–18999: above the page, below
+     * the open nav / rail drawer (19000+) and dialogs (20000). Reaching the
+     * top of the band re-packs every window from the bottom in its current
+     * order, so no amount of clicking climbs over the menu.
+     */
     bringToFront() {
-        let maxZ = 10000;
-        document.querySelectorAll('sac-window').forEach(w => {
-            const z = parseInt(window.getComputedStyle(w).zIndex || 10000);
-            if (z > maxZ) maxZ = z;
-        });
+        const all = Array.from(document.querySelectorAll('sac-window'));
+        const zOf = (w) => parseInt(window.getComputedStyle(w).zIndex, 10) || SacWindow.Z_BASE;
+        let maxZ = SacWindow.Z_BASE;
+        all.forEach((w) => { if (w !== this) maxZ = Math.max(maxZ, zOf(w)); });
+        if (maxZ + 1 > SacWindow.Z_MAX) {
+            const others = all.filter((w) => w !== this).sort((a, b) => zOf(a) - zOf(b));
+            others.forEach((w, i) => { w.style.zIndex = SacWindow.Z_BASE + i; });
+            maxZ = SacWindow.Z_BASE + others.length - 1;
+        }
         this.style.zIndex = maxZ + 1;
     }
 

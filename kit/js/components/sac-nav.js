@@ -364,6 +364,11 @@ class SacNav extends HTMLElement {
                     top: 0; left: 0; right: 0;
                     z-index: 9999;
                 }
+                /* Stacking: floating windows live in 10000–18999, dialogs
+                   from 20000. While the burger's panel (or the rail drawer)
+                   is out, the nav rises above every window and stays under
+                   dialogs — the menu is never covered by a window. */
+                :host([menu-open]) { z-index: 19000; }
                 .ribbon {
                     height: 50px;
                     display: flex;
@@ -911,6 +916,11 @@ class SacNav extends HTMLElement {
                     { detail: { drawer: this._drawerOpen }, bubbles: true, composed: true }));
             }
             backdrop.classList.toggle("open", any);
+            // Rise at once; sink only after the panel has slid out, so the
+            // closing slide is not cut by a window it passes under.
+            clearTimeout(this._layerTimer);
+            if (any) this.setAttribute("menu-open", "");
+            else this._layerTimer = setTimeout(() => this.removeAttribute("menu-open"), 500);
             if (menuBtn) {
                 menuBtn.classList.toggle("active", any);
                 menuBtn.setAttribute("aria-expanded", String(any));

@@ -1475,7 +1475,9 @@ canvas {
         left: 0;
         width: var(--drawer-width);
         height: auto;   /* beats .sidebar.fill: top + bottom size the drawer */
-        z-index: 10000;
+        /* Above every floating window (10000–18999) and the open nav
+           (19000), under dialogs (20000). */
+        z-index: 19001;
         padding-left: calc(0.75rem + env(safe-area-inset-left, 0px));
         padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
         translate: -105% 0;
