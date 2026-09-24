@@ -53,6 +53,14 @@
         { id: "pick",        icon: "eyedropper",  label: "Pipette",               key: "i" },
         { id: "select",      icon: "marquee",     label: "Auswahl · verschieben", key: "m" },
     ];
+    // Paste and crop are not in the kit's icon set yet — requested from the
+    // appkit; registered through its documented extension point until then.
+    if (!sac.icons.has("paste")) {
+        sac.icons.register("paste", '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>');
+    }
+    if (!sac.icons.has("crop")) {
+        sac.icons.register("crop", '<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/>');
+    }
     const SHAPES = new Set(["line", "rect", "rectfill", "ellipse", "ellipsefill"]);
     const BRUSHED = new Set(["pencil", "eraser", "line", "rect", "rectfill", "ellipse", "ellipsefill"]);
 
@@ -341,7 +349,6 @@
             sac.app.styles(BASE + "app.css", CSS_ID);
             this.innerHTML = `
 <sac-nav brand="PIXEL ATELIER" brand-icon="palette" brand-href="#/" host-nav="wide">
-    <div slot="context"><span class="pa-title"></span></div>
     <div slot="toolbar" class="toolbar">
         <button type="button" class="nav-icon-btn pa-toggle active" data-win="tools" title="Werkzeuge ein/aus"><sac-icon name="pencil"></sac-icon></button>
         <button type="button" class="nav-icon-btn pa-toggle active" data-win="palette" title="Palette ein/aus"><sac-icon name="palette"></sac-icon></button>
@@ -354,6 +361,7 @@
         <button type="button" class="nav-icon-btn pa-new" title="Neues Sprite"><sac-icon name="plus"></sac-icon></button>
         <button type="button" class="nav-icon-btn pa-open" title="Öffnen (Strg+O)"><sac-icon name="folder"></sac-icon></button>
         <button type="button" class="nav-icon-btn pa-save" title="Speichern (Strg+S)"><sac-icon name="save"></sac-icon></button>
+        <button type="button" class="nav-icon-btn pa-keys" title="Tastenkürzel (?)"><sac-icon name="keyboard"></sac-icon></button>
         <sac-menu class="pa-menu">
             <button slot="trigger" type="button" class="nav-icon-btn" title="Mehr"><sac-icon name="more"></sac-icon></button>
             <button data-action="save-as"><sac-icon name="save"></sac-icon> Speichern unter…</button>
@@ -370,22 +378,19 @@
         <sac-window class="pa-win" data-win="tools" title="Werkzeuge"
                     width="232px" height="auto" controls="close" no-resize open>
             <div class="pa-winbody">
-                <sac-toolbox class="pa-tools" columns="4" value="pencil"></sac-toolbox>
+                <sac-toolbox class="pa-tools" columns="auto" group="Werkzeuge" value="pencil"></sac-toolbox>
                 <div class="pa-row"><span class="pa-lbl">Pinsel</span>
                     <sac-segmented-control class="pa-brush" value="1">
                         <button data-value="1">1</button><button data-value="2">2</button><button data-value="3">3</button><button data-value="4">4</button>
                     </sac-segmented-control></div>
-                <div class="pa-row pa-row-start"><sac-swatch class="pa-chip" value="#000000" label="aktive Farbe"></sac-swatch><span class="pa-hint">aktive Farbe</span></div>
-                <div class="pa-selgrp"><span class="pa-lbl">Auswahl</span>
-                    <div class="pa-selops">
-                        <button type="button" class="btn pa-fliph" title="Spiegeln waagerecht (Shift+H)">Spiegeln ⇄</button>
-                        <button type="button" class="btn pa-flipv" title="Spiegeln senkrecht (Shift+V)">Spiegeln ⇅</button>
-                        <button type="button" class="btn pa-copyb" title="Kopieren (Strg+C)">Kopieren</button>
-                        <button type="button" class="btn pa-pasteb" title="Einfügen (Strg+V)">Einfügen</button>
-                        <button type="button" class="btn pa-trimb" title="Auf das Objekt trimmen (transparente Ränder weg)">Trimmen</button>
-                    </div>
+                <div class="pa-icons">
+                    <button type="button" class="icon-btn pa-fliph" title="Spiegeln waagerecht (Shift+H)"><sac-icon name="flip-h"></sac-icon></button>
+                    <button type="button" class="icon-btn pa-flipv" title="Spiegeln senkrecht (Shift+V)"><sac-icon name="flip-v"></sac-icon></button>
+                    <button type="button" class="icon-btn pa-copyb" title="Kopieren (Strg+C)"><sac-icon name="copy"></sac-icon></button>
+                    <button type="button" class="icon-btn pa-cutb" title="Ausschneiden (Strg+X)"><sac-icon name="scissors"></sac-icon></button>
+                    <button type="button" class="icon-btn pa-pasteb" title="Einfügen (Strg+V)"><sac-icon name="paste"></sac-icon></button>
+                    <button type="button" class="icon-btn pa-trimb" title="Auswahl auf das Objekt trimmen"><sac-icon name="crop"></sac-icon></button>
                 </div>
-                <p class="pa-hint">Rechtsklick Menü · Alt Pipette · Rad Zoom · Leertaste schieben · Shift Linie · [ ] Pinsel · ←→ / 1–0 Frame · M Auswahl (ziehen/Pfeile, Entf) · Strg+C/V · Shift+H/V spiegeln · Strg+A Frame</p>
             </div>
         </sac-window>
 
@@ -401,7 +406,7 @@
         </sac-window>
 
         <sac-window class="pa-win" data-win="preview" title="Vorschau"
-                    width="232px" height="auto" controls="close" no-resize open>
+                    width="280px" height="auto" controls="close" no-resize open>
             <div class="pa-winbody">
                 <div class="pa-pvstage"><sac-pixel-canvas class="pa-pv" static zoom="3"></sac-pixel-canvas></div>
                 <div class="pa-row pa-pvrow">
@@ -414,17 +419,12 @@
         </sac-window>
     </div>
 
-    <div class="pa-film">
-        <button type="button" class="icon-btn pa-play" title="Abspielen"><sac-icon name="play"></sac-icon></button>
-        <span class="pa-lbl">Frames</span>
-        <button type="button" class="icon-btn pa-prevf" title="Vorheriger Frame (←)"><sac-icon name="chevron-left"></sac-icon></button>
-        <div class="pa-frames"></div>
-        <button type="button" class="icon-btn pa-nextf" title="Nächster Frame (→)"><sac-icon name="chevron-right"></sac-icon></button>
-        <button type="button" class="icon-btn pa-dupf" title="Frame duplizieren"><sac-icon name="copy"></sac-icon></button>
-        <button type="button" class="icon-btn pa-addf" title="Frame hinzufügen"><sac-icon name="plus"></sac-icon></button>
-        <button type="button" class="icon-btn pa-delf" title="Frame löschen"><sac-icon name="trash"></sac-icon></button>
-        <button type="button" class="btn pa-onion active" title="Onion-Skin: Nachbar-Frames halbtransparent, umläuft die Schleife (O)">☾ Onion</button>
-    </div>
+    <sac-filmstrip class="pa-film" actions reorderable pixelated value="0">
+        <div slot="controls" class="pa-film-ctrl">
+            <button type="button" class="icon-btn pa-play" title="Abspielen"><sac-icon name="play"></sac-icon></button>
+            <button type="button" class="icon-btn pa-onion active" title="Onion-Skin (O)"><sac-icon name="onion"></sac-icon></button>
+        </div>
+    </sac-filmstrip>
 </div>`;
         }
 
@@ -439,8 +439,7 @@
             this.$pv = $(".pa-pv");
             this.$tools = $(".pa-tools");
             this.$palette = $(".pa-palette");
-            this.$chip = $(".pa-chip");
-            this.$frames = $(".pa-frames");
+            this.$film = $(".pa-film");
 
             this.tool = "pencil";
             this.brush = 1;
@@ -455,7 +454,7 @@
 
             this.$tools.tools = TOOLS;
             this._wire();
-            this._load(blankDoc(32, 32, 1), { name: "sprite.png", handle: null }, null);
+            this._load(blankDoc(32, 32, 1), null, null);
             this._setTool("pencil");
             this._setBrush(1);
             this._restore();   // async: the last session, if there is one
@@ -520,6 +519,17 @@
                 k(String(n % 10), () => { if (n - 1 < this.doc.frames.length) this._setFrame(n - 1); }, n === 1 ? "Frame 1 … 10" : "", "Frames");
             }
             k("o", () => this._toggleOnion(), "Onion-Skin", "Frames");
+            this._offs.push(sac.shortcuts.bind());
+            this._offs.push(sac.shortcuts.add([
+                { group: "Ansicht", keys: "Leertaste + ziehen", description: "Verschieben" },
+                { group: "Ansicht", keys: ["Mittlere Maustaste"], description: "Verschieben" },
+                { group: "Ansicht", keys: ["Mausrad"], description: "Zoom am Cursor" },
+                { group: "Werkzeuge", keys: ["Alt", "Klick"], description: "Farbe aufnehmen, mit jedem Werkzeug" },
+                { group: "Werkzeuge", keys: ["Shift", "Klick"], description: "Stift / Radierer: Linie vom letzten Punkt" },
+                { group: "Auswahl", keys: ["Strg", "C"], description: "Kopieren" },
+                { group: "Auswahl", keys: ["Strg", "X"], description: "Ausschneiden" },
+                { group: "Auswahl", keys: ["Strg", "V"], description: "Einfügen an derselben Stelle, auch Bilder aus anderen Programmen" },
+            ]));
             // Clipboard through the native events, not hotkeys: those would
             // swallow Ctrl+C in every text field of the page.
             const clip = (type, fn) => {
@@ -561,6 +571,7 @@
             on(".pa-fliph", "click", () => this._flip("h"));
             on(".pa-flipv", "click", () => this._flip("v"));
             on(".pa-copyb", "click", () => this._copy());
+            on(".pa-cutb", "click", () => this._cut());
             on(".pa-pasteb", "click", () => this._paste());
             on(".pa-trimb", "click", () => this._trimSel());
 
@@ -571,11 +582,11 @@
             on(".pa-pvzoom", "sac:change", (e) => this._setPvZoom(Number(e.detail.value)));
 
             on(".pa-play", "click", () => this._togglePlay());
-            on(".pa-prevf", "click", () => this._setFrame(this.frame - 1));
-            on(".pa-nextf", "click", () => this._setFrame(this.frame + 1));
-            on(".pa-dupf", "click", () => this._dupFrame());
-            on(".pa-addf", "click", () => this._addFrame());
-            on(".pa-delf", "click", () => this._deleteFrame());
+            on(".pa-keys", "click", () => sac.shortcuts.show({ title: "Tastenkürzel" }));
+            const FRAME_ACTIONS = { add: () => this._addFrame(), duplicate: () => this._dupFrame(), delete: () => this._deleteFrame() };
+            this.$film.addEventListener("sac:change", (e) => this._setFrame(e.detail.index));
+            this.$film.addEventListener("sac:action", (e) => FRAME_ACTIONS[e.detail.action]?.());
+            this.$film.addEventListener("sac:reorder", (e) => this._moveFrame(e.detail.from, e.detail.to));
             on(".pa-onion", "click", () => this._toggleOnion());
 
             // Canvas: the kit reports cells, the tools below do the pixels.
@@ -618,10 +629,11 @@
                 w.setAttribute("left", Math.round(left) + "px");
                 w.setAttribute("top", Math.round(top) + "px");
             };
-            const ww = this._win("palette").offsetWidth || 212, ph = this._win("preview").offsetHeight || 220;
+            const pw = this._win("palette").offsetWidth || 232, vw = this._win("preview").offsetWidth || 280;
+            const ph = this._win("preview").offsetHeight || 220;
             put("tools", r.left + pad, top + pad);
-            put("palette", r.right - ww - pad, top + pad);
-            put("preview", r.right - ww - pad, Math.max(top + pad, r.bottom - ph - pad));
+            put("palette", r.right - pw - pad, top + pad);
+            put("preview", r.right - vw - pad, Math.max(top + pad, r.bottom - ph - pad));
         }
 
         /* ---------------------------------------------------- document ---- */
@@ -738,7 +750,6 @@
         _markSwatch(from) {
             const hex = rgbaToHex(this.color);
             if (from !== "palette") for (const s of this.$palette.querySelectorAll("sac-swatch")) s.selected = s.value === hex;
-            this.$chip.value = hex;
         }
 
         /* --------------------------------------------------- selection ----
@@ -963,22 +974,25 @@
             b.querySelector("sac-icon").setAttribute("name", on ? "pause" : "play");
             b.title = on ? "Anhalten" : "Abspielen";
         }
+        /** Move a frame (the filmstrip has already moved its thumbnail). */
+        _moveFrame(from, to) {
+            this._clearSel();
+            this._pushUndo();
+            const [f] = this.doc.frames.splice(from, 1);
+            this.doc.frames.splice(to, 0, f);
+            this.frame = to;
+            this._buildFilm();
+            this._refreshAfterEdit();
+        }
+        /** One thumbnail canvas per frame; the strip holds them by reference. */
         _buildFilm() {
-            this.$frames.innerHTML = "";
-            for (let i = 0; i < this.doc.frames.length; i++) {
-                const b = document.createElement("button");
-                b.type = "button";
-                b.className = "btn pa-frame";
-                b.dataset.frame = i;
-                b.textContent = i;
-                b.title = `Frame ${i}`;
-                b.addEventListener("click", () => this._setFrame(i));
-                this.$frames.appendChild(b);
-            }
+            this._thumbs = this.doc.frames.map(() => canvasOf(this.doc.w, this.doc.h));
+            this._thumbs.forEach((c, i) => c.getContext("2d").putImageData(this.doc.image(i), 0, 0));
+            this.$film.frames = this._thumbs;
             this._syncFilm();
         }
         _syncFilm() {
-            for (const b of this.$frames.children) b.classList.toggle("active", +b.dataset.frame === this.frame);
+            this.$film.value = this.frame;
             this._syncMeta();
         }
 
@@ -1045,6 +1059,12 @@
             this.$canvas.underlays = under;
             this.$canvas.overlays = f && f.frame === this.frame ? [{ image: new ImageData(f.data.slice(), f.w, f.h), x: f.x, y: f.y }] : [];
             this.$canvas.image = this.doc.image(this.frame);
+            // Only the thumbnail of the frame being painted changes.
+            const thumb = this._thumbs && this._thumbs[this.frame];
+            if (thumb && !this._playing) {
+                thumb.getContext("2d").putImageData(this.doc.image(this.frame, this._bufOf()(this.frame)), 0, 0);
+                this.$film.refresh(this.frame);
+            }
             if (!this._pvTimer) this._renderPreview();
         }
         /** After an edit is finished: palette "used", meta, autosave. */
@@ -1058,14 +1078,11 @@
             this.querySelector(".pa-coords").textContent =
                 c && c.inside ? ` · ${c.x}, ${c.y}` + (this.doc.frames.length > 1 ? ` · f${this.frame}` : "") : "";
         }
+        /** The canvas overlay: the file's name (once it has one), size, frames, zoom; • = unsaved. */
         _syncMeta() {
             const d = this.doc, n = d.frames.length;
-            const dims = n > 1 ? `${d.w}×${d.h} · ${n}f` : `${d.w}×${d.h}`;
-            const title = this.querySelector(".pa-title");
-            title.textContent = this.file ? this.file.name : "";
-            title.classList.toggle("dirty", !!this._dirty);
-            this.querySelector(".pa-meta").textContent =
-                `${dims} · ${this.$canvas.zoom}× · ${this.savedBlob ? "gespeichert" : "neu"}${this._dirty ? " • geändert" : ""}`;
+            const parts = [this.file && this.file.name, `${d.w}×${d.h}`, n > 1 && `${n} Frames`, `${this.$canvas.zoom}×`];
+            this.querySelector(".pa-meta").textContent = parts.filter(Boolean).join(" · ") + (this._dirty ? " •" : "");
         }
         _toast(msg) { if (window.sac && sac.toast) sac.toast(msg); }
 
@@ -1107,7 +1124,7 @@
             if (!fs) return;
             try {
                 await fs.write("autosave.png", await encodeDoc(this.doc, this._bufOf()));
-                await fs.write("session", { name: this.file ? this.file.name : "sprite.png", dirty: !!this._dirty });
+                await fs.write("session", { name: this.file ? this.file.name : null, dirty: !!this._dirty });
             } catch (err) { console.warn("[pixel-atelier] autosave failed:", err); }
         }
         _saveSettings() {
@@ -1142,7 +1159,7 @@
                 if (blob instanceof Blob && !this.undo.length) {
                     const res = await decodeFile(blob);
                     if (res.meta) {
-                        this._load(docFromStrip(res, res.meta.frames), { name: session.name || "sprite.png", handle: null }, null);
+                        this._load(docFromStrip(res, res.meta.frames), session.name ? { name: session.name, handle: null } : null, null);
                         if (session.dirty) { this._setDirty(true); this._toast("Ungespeicherte Arbeit wiederhergestellt"); }
                     }
                 }
@@ -1160,7 +1177,7 @@
             if (!this._dirty) return true;
             const a = await sac.dialog.confirm({
                 title: "Ungespeicherte Änderungen verwerfen?",
-                message: this.file ? this.file.name : "",
+                message: this.file ? this.file.name : "Das Bild ist noch nicht gespeichert.",
                 buttons: [
                     { action: "cancel", label: "Abbrechen", kind: "default" },
                     { action: "discard", label: "Verwerfen", kind: "destructive" },
@@ -1190,8 +1207,7 @@
             if (action === "drop" && dropped) { this._openFile(dropped, { name: dropped.name, handle: null }); return; }
             if (action !== "create") return;
             const num = (s) => Number(dlg.querySelector(s).value);
-            this._load(blankDoc(clamp(num(".pa-n-w"), 1, MAX_SIDE), clamp(num(".pa-n-h"), 1, MAX_SIDE), clamp(num(".pa-n-f"), 1, MAX_FRAMES)),
-                { name: "sprite.png", handle: null }, null);
+            this._load(blankDoc(clamp(num(".pa-n-w"), 1, MAX_SIDE), clamp(num(".pa-n-h"), 1, MAX_SIDE), clamp(num(".pa-n-f"), 1, MAX_FRAMES)), null, null);
             this._touch();
         }
 

@@ -20,17 +20,9 @@ app-pixel-atelier .pa-root {
 app-pixel-atelier .pa-body { position: relative; flex: 1; min-height: 0; }
 app-pixel-atelier .pa-canvas { position: absolute; inset: 0; }
 
-/* ---- top bar: the document's name; a dot while there is unsaved work ---- */
-app-pixel-atelier .pa-title {
-    max-width: 24ch;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--text-muted);
-}
-app-pixel-atelier .pa-title.dirty::after { content: " •"; color: var(--accent-text); }
+/* ---- toggles that are on: the window is open, onion skin is on ---- */
 app-pixel-atelier .nav-icon-btn.active,
-app-pixel-atelier .pa-film .active {
+app-pixel-atelier .icon-btn.active {
     background: var(--accent-tint);
     color: var(--accent-text);
 }
@@ -42,19 +34,16 @@ app-pixel-atelier .pa-coords { color: var(--accent-text); }
 /* ---- floating windows ---- */
 app-pixel-atelier .pa-winbody { display: flex; flex-direction: column; gap: 0.625rem; }
 app-pixel-atelier .pa-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-app-pixel-atelier .pa-row-start { justify-content: flex-start; }
 app-pixel-atelier .pa-lbl {
     font-size: 0.6875rem;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--text-muted);
 }
-app-pixel-atelier .pa-hint { margin: 0; font-size: 0.6875rem; line-height: 1.5; color: var(--text-muted); }
-app-pixel-atelier .pa-chip { width: 24px; flex: none; }
-app-pixel-atelier .pa-selgrp { display: flex; flex-direction: column; gap: 0.375rem; }
-app-pixel-atelier .pa-selops { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3125rem; }
-app-pixel-atelier .pa-selops .btn { width: auto; padding-left: 0.25rem; padding-right: 0.25rem; }
-app-pixel-atelier .pa-selops .pa-trimb { grid-column: 1 / -1; }
+/* Selection actions: one row of icons, spread over the window's width. */
+app-pixel-atelier .pa-icons { display: flex; justify-content: space-between; }
+/* Preview: play and the zoom steps on one line. */
+app-pixel-atelier .pa-pvrow { flex-wrap: nowrap; }
 app-pixel-atelier .pa-pvstage {
     display: flex;
     justify-content: center;
@@ -65,20 +54,9 @@ app-pixel-atelier .pa-pvstage {
     border-radius: var(--radius-m);
 }
 
-/* ---- frame bar ---- */
-app-pixel-atelier .pa-film {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    border-top: 1px solid var(--border);
-    background: var(--panel);
-}
-app-pixel-atelier .pa-frames { display: flex; flex-wrap: wrap; gap: 0.25rem; }
-app-pixel-atelier .pa-film .btn { width: auto; }
-app-pixel-atelier .pa-frame { min-width: 2rem; font-variant-numeric: tabular-nums; }
+/* ---- frame bar: the kit's filmstrip ---- */
+app-pixel-atelier .pa-film { border-top: 1px solid var(--border); }
+app-pixel-atelier .pa-film-ctrl { display: flex; gap: 4px; }
 
 /* Dialogs are appended to <body>, outside the app element. */
 .pa-form { display: flex; flex-direction: column; gap: 0.75rem; min-width: 260px; }
@@ -86,4 +64,3 @@ app-pixel-atelier .pa-frame { min-width: 2rem; font-variant-numeric: tabular-num
 .pa-form .pa-row label { margin: 0; }
 .pa-form .pa-note { margin: 0; color: var(--text-muted); }
 .pa-form sac-drop-zone { --drop-zone-min-height: 96px; }
-app-pixel-atelier .pa-pvrow { flex-wrap: wrap; justify-content: flex-start; }
