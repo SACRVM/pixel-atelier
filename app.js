@@ -430,7 +430,7 @@
                 </div>
                 <div class="pa-row pa-pvrow">
                     <sac-segmented-control class="pa-pvzoom" value="3">
-                        <button data-value="1">1×</button><button data-value="2">2×</button><button data-value="3">3×</button><button data-value="4">4×</button>
+                        <button data-value="1">1×</button><button data-value="2">2×</button><button data-value="3">3×</button><button data-value="4">4×</button><button data-value="5">5×</button>
                     </sac-segmented-control>
                 </div>
             </div>
@@ -1081,11 +1081,10 @@
             this._touch();
         }
         _setPvZoom(z) {
-            // 1× … 4×: the kit's static canvas snaps 5× down to 4× (ladder 1 2 3 4 6 8 …).
-            this.pvZoom = clamp(Math.round(z) || 3, 1, 4);
+            // The Atelier's steps, 1× … 5× (a static canvas takes any integer zoom).
+            this.pvZoom = clamp(Math.round(z) || 3, 1, 5);
             this.querySelector(".pa-pvzoom").value = String(this.pvZoom);
             this.$pv.setAttribute("zoom", String(this.pvZoom));
-            this.$pv.render();   // a static canvas re-sizes itself on render()
             this._saveSettings();
         }
 
