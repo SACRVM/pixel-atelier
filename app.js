@@ -382,7 +382,7 @@
         <sac-hud class="pa-hud" position="bottom-left"><span class="pa-meta"></span><span class="pa-coords"></span></sac-hud>
 
         <sac-window class="pa-win" data-win="tools" title="Tools" left="14px" top="64px"
-                    width="232px" height="auto" controls="close" snap="14" open>
+                    width="232px" height="auto" controls="close" snap="14" no-compact open>
             <div class="pa-winbody">
                 <sac-toolbox class="pa-tools" columns="auto" group="Tools" value="pencil"></sac-toolbox>
                 <div class="pa-row"><span class="pa-lbl">Brush</span>
@@ -393,7 +393,7 @@
         </sac-window>
 
         <sac-window class="pa-win" data-win="selection" title="Selection" left="14px"
-                    width="232px" height="auto" controls="close" snap="14" open>
+                    width="232px" height="auto" controls="close" snap="14" no-compact open>
             <div class="pa-winbody">
                 <div class="pa-icons">
                     <button type="button" class="icon-btn tool pa-fliph" title="Flip horizontal (Shift+H)"><sac-icon name="flip-h"></sac-icon></button>
@@ -407,7 +407,7 @@
         </sac-window>
 
         <sac-window class="pa-win" data-win="palette" title="Palette" right="14px" top="64px"
-                    width="232px" height="auto" controls="close" snap="14" open>
+                    width="232px" height="auto" controls="close" snap="14" no-compact open>
             <div class="pa-winbody">
                 <div class="pa-row">
                     <sac-segmented-control class="pa-palmode" value="all">
@@ -421,7 +421,7 @@
         </sac-window>
 
         <sac-window class="pa-win" data-win="preview" title="Preview" right="14px"
-                    width="auto" height="auto" controls="close" no-resize snap="14" open>
+                    width="auto" height="auto" controls="close" no-resize snap="14" no-compact open>
             <div class="pa-winbody">
                 <div class="pa-pvstage"><sac-pixel-canvas class="pa-pv" static zoom="3"></sac-pixel-canvas></div>
                 <div class="pa-row">
