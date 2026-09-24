@@ -145,7 +145,9 @@ class SacToolbox extends HTMLElement {
                 :host {
                     display: inline-block;
                     --sac-toolbox-columns: 2;
-                    --tool-size: 32px;
+                    /* The kit's tool measure (ui.css), so an .icon-btn.tool
+                       row beside the box matches it; 32px standalone. */
+                    --tool-size: var(--tool-btn-size, 32px);
                     max-width: 100%;
                 }
                 :host([disabled]) { opacity: .5; pointer-events: none; }
@@ -188,7 +190,7 @@ class SacToolbox extends HTMLElement {
                     background: transparent;
                     color: var(--text-muted);
                     cursor: pointer;
-                    --icon-size: 18px;
+                    --icon-size: var(--tool-btn-icon, 18px);
                     transition: background 0.15s, color 0.15s;
                 }
                 button.tool:hover { background: var(--hover); color: var(--text); }
@@ -208,7 +210,7 @@ class SacToolbox extends HTMLElement {
                 /* Touch: the whole button grows — a tool grid is tapped all
                    day, a halo over a neighbour would steal its taps. */
                 @media (pointer: coarse) {
-                    :host { --tool-size: 44px; }
+                    :host { --tool-size: var(--tool-btn-size, 44px); }
                 }
                 @media (hover: none) {
                     button.tool:hover { background: transparent; color: var(--text-muted); }

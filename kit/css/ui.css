@@ -130,6 +130,13 @@
     --icon-btn-size: 26px;
     --icon-btn-icon: 14px;
 
+    /* Tool button — ONE measure for <sac-toolbox>'s tools and the light-DOM
+       .icon-btn.tool beside them (a selection-actions row under a tool box),
+       so the two can never drift. 18/32 is the same ~56% ratio. Grows to
+       44px under a coarse pointer (§15). */
+    --tool-btn-size: 32px;
+    --tool-btn-icon: 18px;
+
     /* Caption / eyebrow type — the ONE shared shape for uppercase section
        titles (sac-section) and lone light-DOM captions (.sac-caption), so the
        two can never drift. Colour is deliberately NOT here: it is per role —
@@ -692,6 +699,19 @@ a.nav-icon-btn { text-decoration: none; }
 .icon-btn.danger:hover:not(:disabled) { color: var(--danger-text); }
 .icon-btn:disabled { opacity: 0.3; cursor: default; }
 .icon-btn[hidden] { display: none; }
+/* The tool-sized variant: <sac-toolbox>'s measure and states, for action
+   buttons that sit next to tools. It re-points the icon-btn tokens, so the
+   touch halo below computes from the right box too. */
+.icon-btn.tool {
+    --icon-btn-size: var(--tool-btn-size);
+    --icon-btn-icon: var(--tool-btn-icon);
+    color: var(--text-muted);
+}
+.icon-btn.tool.active,
+.icon-btn.tool[aria-pressed="true"] {
+    background: var(--accent-fill);
+    color: var(--on-accent);
+}
 .icon-btn svg {
     width: var(--icon-size);
     height: var(--icon-size);
@@ -1392,6 +1412,7 @@ canvas {
 }
 
 @media (pointer: coarse) {
+    :root { --tool-btn-size: 44px; }
     .btn { min-height: 44px; }
     /* In a toolbar/ribbon the button keeps its 32px look — a 44px fill
        would crowd the 50px ribbon — and an invisible halo takes the hit

@@ -31,11 +31,21 @@
  *   ignored while the user is typing in an <input>, <textarea>, <select> or
  *   a contenteditable — including ones inside Shadow DOM (the check walks
  *   event.composedPath()[0], not event.target). Pass { allowInInput: true }
- *   for a binding that must fire anyway. Combos WITH ctrl/alt/meta always
- *   fire: nobody types Ctrl-K into a text field.
+ *   for a binding that must fire anyway. Combos WITH ctrl/alt/meta fire by
+ *   default — nobody types Ctrl-K into a text field — unless the binding
+ *   passes { skipInInput: true }: for a combo that ALSO has a text-editing
+ *   meaning (mod+a select-all, mod+z undo, mod+c/x/v), so the canvas keeps
+ *   its shortcut and every input on the page keeps its own.
+ *
+ * Activation guard:
+ *   A plain "enter" or "space" binding does not fire while focus is on
+ *   something those keys already activate — a button, a link, a checkbox,
+ *   a [role=button] / menuitem / tab / option … Enter on a focused button
+ *   presses the button, not the page's "play". { allowInInput: true } opts
+ *   out here too.
  *
  * API:
- *   register(combo, handler, { description, group, allowInInput })
+ *   register(combo, handler, { description, group, allowInInput, skipInInput })
  *              → unregister function (idempotent, safe to call twice).
  *              `group` is an optional heading ("Tools", "Edit", "View") —
  *              it only sorts the binding in listings such as
@@ -202,6 +212,23 @@
         return !["button", "submit", "reset", "checkbox", "radio", "range", "color", "file"].includes(type);
     }
 
+    /** Is focus on something Enter / Space already activates? */
+    const ACTIVATING_ROLES = new Set(["button", "link", "menuitem", "menuitemcheckbox",
+        "menuitemradio", "tab", "option", "checkbox", "radio", "switch", "treeitem"]);
+    function isActivationTarget(e) {
+        const path = typeof e.composedPath === "function" ? e.composedPath() : null;
+        const el = (path && path[0]) || e.target;
+        if (!el || el.nodeType !== 1) return false;
+        const tag = (el.localName || "").toLowerCase();
+        if (tag === "button" || tag === "summary" || tag === "select") return true;
+        if (tag === "a" && el.hasAttribute("href")) return true;
+        if (tag === "input") {
+            const type = (el.getAttribute("type") || "text").toLowerCase();
+            if (["button", "submit", "reset", "checkbox", "radio", "file", "color"].includes(type)) return true;
+        }
+        return ACTIVATING_ROLES.has((el.getAttribute("role") || "").toLowerCase());
+    }
+
     function onKeydown(e) {
         // Something upstream already handled this key (a component's own
         // keyboard trap, an autocomplete). Don't fire on top of it.
@@ -214,7 +241,10 @@
 
         const entry = stack[stack.length - 1];   // newest registration wins
         const hasModifier = e.ctrlKey || e.altKey || e.metaKey;
-        if (!entry.allowInInput && !hasModifier && isTypingTarget(e)) return;
+        if (!entry.allowInInput) {
+            if (isTypingTarget(e) && (!hasModifier || entry.skipInInput)) return;
+            if (!hasModifier && (combo === "enter" || combo === " ") && isActivationTarget(e)) return;
+        }
 
         e.preventDefault();
         try {
@@ -252,6 +282,7 @@
                 description:  opts.description ? String(opts.description) : "",
                 group:        opts.group ? String(opts.group) : "",
                 allowInInput: !!opts.allowInInput,
+                skipInInput:  !!opts.skipInInput,
             };
             const stack = stacks.get(canon) || [];
             stack.push(entry);

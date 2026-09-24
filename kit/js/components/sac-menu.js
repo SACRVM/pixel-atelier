@@ -28,6 +28,19 @@
  *
  * Methods:
  *   open() / close() / toggle() — show, hide, flip.
+ *   openAt(point) — open at a viewport point instead of under the trigger:
+ *          a right-click context menu. `point` is the contextmenu/pointer
+ *          event itself or any { clientX, clientY }. The panel's top-left
+ *          sits at the point; it flips left / up when there is no room and
+ *          stays clamped 8px inside the viewport. No trigger needed — a
+ *          <sac-menu> with only items is a context menu. Scrolling closes a
+ *          point-anchored menu (the point no longer means anything), and
+ *          Escape returns focus to whatever had it before.
+ *
+ *            canvas.addEventListener("contextmenu", (e) => {
+ *                e.preventDefault();
+ *                menu.openAt(e);
+ *            });
  *
  * Events:
  *   sac:select — detail { action } — the clicked item's data-action.
@@ -60,6 +73,7 @@ class SacMenu extends HTMLElement {
         super();
         this.attachShadow({ mode: "open" });
         this._lowerTimer = null;
+        this._point = null;          // { x, y } while opened by openAt()
         this._onDocPointer = this._onDocPointer.bind(this);
         this._onDocKeydown = this._onDocKeydown.bind(this);
         this._onReposition = this._onReposition.bind(this);
@@ -95,6 +109,7 @@ class SacMenu extends HTMLElement {
         } else {
             this._lower();
             this._clearHighlight();
+            this._point = null;
         }
     }
 
@@ -113,6 +128,15 @@ class SacMenu extends HTMLElement {
     toggle() {
         if (this.hasAttribute("open")) this.close();
         else this.open();
+    }
+
+    openAt(point) {
+        const x = Number(point && point.clientX), y = Number(point && point.clientY);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) { this.open(); return; }
+        if (!this.hasAttribute("open")) this._restoreFocus = document.activeElement;
+        this._point = { x, y };
+        if (this.hasAttribute("open")) this._position();   // re-open elsewhere
+        else this.setAttribute("open", "");
     }
 
     /* ------------------------------------------------------------- render */
@@ -315,7 +339,10 @@ class SacMenu extends HTMLElement {
         el.setAttribute("aria-expanded", this.hasAttribute("open") ? "true" : "false");
     }
 
-    _onReposition() {
+    _onReposition(e) {
+        // A point has no meaning once the page under it moved: close, as a
+        // native context menu does. Resizes still just re-clamp.
+        if (this._point && e && e.type === "scroll") { this.close(); return; }
         this._position();
     }
 
@@ -324,6 +351,7 @@ class SacMenu extends HTMLElement {
      *  clamped 8px inside the viewport on both axes. */
     _position() {
         if (!this.hasAttribute("open") || !this._panel) return;
+        if (this._point) { this._positionAt(this._point); return; }
         const anchor = this._triggerEl() || this._triggerBox;
         const rect   = anchor.getBoundingClientRect();
         const panel  = this._panel.getBoundingClientRect();
@@ -340,6 +368,19 @@ class SacMenu extends HTMLElement {
         let left = rect.left;
         left = Math.max(margin, Math.min(left, window.innerWidth - panel.width - margin));
 
+        this._panel.style.top  = `${top}px`;
+        this._panel.style.left = `${left}px`;
+    }
+
+    /** Context-menu placement: top-left at the point, flipped left / up
+     *  when the panel would leave the viewport, then clamped 8px inside. */
+    _positionAt({ x, y }) {
+        const panel  = this._panel.getBoundingClientRect();
+        const margin = 8;
+        let left = x + panel.width + margin > window.innerWidth ? x - panel.width : x;
+        let top  = y + panel.height + margin > window.innerHeight ? y - panel.height : y;
+        left = Math.max(margin, Math.min(left, window.innerWidth - panel.width - margin));
+        top  = Math.max(margin, Math.min(top, window.innerHeight - panel.height - margin));
         this._panel.style.top  = `${top}px`;
         this._panel.style.left = `${left}px`;
     }
@@ -382,8 +423,9 @@ class SacMenu extends HTMLElement {
     }
 
     _focusTrigger() {
-        const el = this._triggerEl();
-        if (el && typeof el.focus === "function") el.focus();
+        const el = this._triggerEl() || this._restoreFocus;
+        this._restoreFocus = null;
+        if (el && el.isConnected && typeof el.focus === "function") el.focus({ preventScroll: true });
     }
 
     _onItemClick(e) {

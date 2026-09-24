@@ -87,7 +87,8 @@
  * Input:
  *   Wheel zooms around the cursor. Middle-drag, or Space held + drag, pans.
  *   Right-click is not consumed: listen for "contextmenu" on the element and
- *   open a <sac-menu> there. Double-click is left to the app too.
+ *   open a <sac-menu> there with menu.openAt(event). Double-click is left to
+ *   the app too.
  *
  * Compact / touch: one finger draws (sac:pixel-* as with a mouse). A second
  * finger cancels that stroke (sac:pixel-cancel) and pinches: zoom snaps to
