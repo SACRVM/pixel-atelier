@@ -396,10 +396,13 @@
         <sac-window class="pa-win" data-win="palette" title="Palette" right="14px" top="64px"
                     width="232px" height="auto" controls="close" open>
             <div class="pa-winbody">
-                <sac-segmented-control class="pa-palmode" value="all">
-                    <button data-value="all">All</button>
-                    <button data-value="used">Used</button>
-                </sac-segmented-control>
+                <div class="pa-row">
+                    <sac-segmented-control class="pa-palmode" value="all">
+                        <button data-value="all">All</button>
+                        <button data-value="used">Used</button>
+                    </sac-segmented-control>
+                    <button type="button" class="icon-btn tool pa-palload" title="Load palette… (.gpl, .hex or an image)"><sac-icon name="folder"></sac-icon></button>
+                </div>
                 <sac-swatch-grid class="pa-palette" columns="6" selectable></sac-swatch-grid>
             </div>
         </sac-window>
@@ -408,8 +411,11 @@
                     width="300px" height="auto" controls="close" open>
             <div class="pa-winbody pa-pvbody">
                 <div class="pa-pvstage"><sac-pixel-canvas class="pa-pv" static zoom="3"></sac-pixel-canvas></div>
-                <div class="pa-row pa-pvrow">
+                <div class="pa-row">
                     <button type="button" class="icon-btn pa-pvplay" title="Play"><sac-icon name="play"></sac-icon></button>
+                    <sac-stepper class="pa-fps" value="8" min="1" max="30" unit="fps" label="Playback speed"></sac-stepper>
+                </div>
+                <div class="pa-row pa-pvrow">
                     <sac-segmented-control class="pa-pvzoom" value="3">
                         <button data-value="1">1×</button><button data-value="2">2×</button><button data-value="3">3×</button><button data-value="4">4×</button><button data-value="6">6×</button><button data-value="8">8×</button>
                     </sac-segmented-control>
@@ -594,6 +600,8 @@
             on(".pa-palmode", "sac:change", (e) => { this.palMode = e.detail.value; this._buildPalette(); this._saveSettings(); });
 
             on(".pa-pvplay", "click", () => this._pvToggle());
+            on(".pa-fps", "sac:change", (e) => this._setFps(Number(e.detail.value)));
+            on(".pa-palload", "click", () => this._loadPalette());
             on(".pa-pvzoom", "sac:change", (e) => this._setPvZoom(Number(e.detail.value)));
 
             on(".pa-play", "click", () => this._togglePlay());
@@ -673,6 +681,7 @@
             this._dirty = false;
             this._ctx.setDirty?.(false);
             this.$canvas.selection = null;
+            this.querySelector(".pa-fps").value = doc.fps;
             this._buildPalette();
             this._buildFilm();
             this._render();
@@ -1050,6 +1059,14 @@
             this._saveSettings();
         }
         _pvIcon() { this._playIcon(".pa-pvplay", !!this._pvWanted && this.doc && this.doc.frames.length > 1); }
+        /** Playback speed — the sprite's own, saved with it. Both clocks follow. */
+        _setFps(n) {
+            this.doc.fps = clamp(Math.round(n) || 8, 1, 30);
+            if (this._playing) { this._stopPlay(); this._togglePlay(); }
+            if (this._pvTimer) { this._pvStop(true); this._pvStart(); }
+            this._setDirty(true);
+            this._touch();
+        }
         _setPvZoom(z) {
             // The kit's zoom ladder (1 2 3 4 6 8 …) — the steps the buttons offer.
             this.pvZoom = [1, 2, 3, 4, 6, 8].includes(z) ? z : 3;
@@ -1067,6 +1084,45 @@
                 ...colors.map((value) => ({ value }))];
             this.querySelector(".pa-palmode").value = this.palMode;
             this._markSwatch();
+        }
+
+        /**
+         * Load a palette: a GIMP palette (.gpl), a list of hex colours
+         * (.hex / .txt, one per line as Lospec exports them), or an image —
+         * then its distinct colours, in reading order. It becomes the
+         * sprite's palette and is saved with it.
+         */
+        async _loadPalette() {
+            const files = this._ctx.files;
+            if (!files) { this._toast("This host offers no files."); return; }
+            const picked = await files.open({ accept: ".gpl,.hex,.txt,image/*", title: "Load palette" });
+            if (!picked) return;
+            let colors = [];
+            try {
+                if (picked.file.type.startsWith("image/")) {
+                    const res = await decodeFile(picked.file), d = res.g.getImageData(0, 0, res.width, res.height).data, seen = new Set();
+                    for (let i = 0; i < d.length && seen.size < 256; i += 4) if (d[i + 3]) seen.add(rgbaToHex([d[i], d[i + 1], d[i + 2], 255]));
+                    colors = [...seen];
+                } else {
+                    const text = await picked.file.text();
+                    if (/^GIMP Palette/.test(text)) {
+                        for (const line of text.split(/\r?\n/)) {
+                            const m = line.match(/^\s*(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})/);
+                            if (m) colors.push(rgbaToHex([+m[1], +m[2], +m[3], 255].map((v) => clamp(v, 0, 255))));
+                        }
+                    } else {
+                        colors = (text.match(/#?\b[0-9a-f]{6}\b/gi) || []).map((h) => "#" + h.replace("#", "").toLowerCase());
+                    }
+                    colors = [...new Set(colors)].slice(0, 256);
+                }
+            } catch { colors = []; }
+            if (!colors.length) { this._toast(`No colors found in ${picked.name}`); return; }
+            this.doc.palette = colors;
+            this.palMode = "all";
+            this._buildPalette();
+            this._setDirty(true);
+            this._touch();
+            this._toast(`Palette loaded: ${colors.length} colors`);
         }
 
         /* ---------------------------------------------------- refresh ----- */

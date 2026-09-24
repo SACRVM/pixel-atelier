@@ -9,6 +9,9 @@ as an app on a SACRVM desktop.
 npx serve .
 ```
 
+`serve.json` tells the dev server not to cache, so a reload always picks up
+the current files.
+
 ## What it does
 
 The editor of the Atelier, the sprite studio of BunnyBot's web app, as a
@@ -25,8 +28,12 @@ close them, and bring them back from the top bar.
 - **Frames:** add, duplicate and delete in the bar at the bottom. Jump with
   ←/→ or 1–0. Onion skin wraps the loop, and the preview plays the animation
   while you paint.
-- **Palette:** DawnBringer 32, or *Used* for the sprite's own colors, most
-  used first.
+- **Palette:** DawnBringer 32 to start with, or load your own: a GIMP palette
+  (`.gpl`), a list of hex colors (`.hex` / `.txt`, as Lospec exports them) or
+  an image, whose colors are taken in reading order. *Used* shows the sprite's
+  own colors, most used first.
+- **Speed:** set the animation's frames per second in the preview window.
+  It is saved with the sprite.
 
 Language switching is planned as one solution for all SACRVM APPKIT apps;
 until then the UI is English.
