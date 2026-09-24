@@ -376,7 +376,7 @@
         <sac-hud class="pa-hud" position="bottom-left"><span class="pa-meta"></span><span class="pa-coords"></span></sac-hud>
 
         <sac-window class="pa-win" data-win="tools" title="Werkzeuge"
-                    width="232px" height="auto" controls="close" open>
+                    width="252px" height="auto" controls="close" open>
             <div class="pa-winbody">
                 <sac-toolbox class="pa-tools" columns="auto" group="Werkzeuge" value="pencil"></sac-toolbox>
                 <div class="pa-row"><span class="pa-lbl">Pinsel</span>

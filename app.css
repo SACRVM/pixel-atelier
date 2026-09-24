@@ -42,11 +42,13 @@ app-pixel-atelier .pa-lbl {
 }
 /* Selection actions: one row of icons, spread over the window's width. */
 app-pixel-atelier .pa-icons {
-    /* Same measure as the tool box above (sac-toolbox: 32px, 18px icon; 44px on touch). */
+    /* Same measure as the tool box above (sac-toolbox: 32px, 18px icon; 44px on touch)… */
     --icon-btn-size: 32px;
     --icon-btn-icon: 18px;
-    display: flex;
-    justify-content: space-between;
+    /* …and the same grid (sac-toolbox columns="auto": 4px gap), so the two rows line up. */
+    display: grid;
+    grid-template-columns: repeat(auto-fill, var(--icon-btn-size));
+    gap: 4px;
 }
 @media (pointer: coarse) {
     app-pixel-atelier .pa-icons { --icon-btn-size: 44px; }
