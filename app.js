@@ -376,7 +376,7 @@
         <sac-hud class="pa-hud" position="bottom-left"><span class="pa-meta"></span><span class="pa-coords"></span></sac-hud>
 
         <sac-window class="pa-win" data-win="tools" title="Werkzeuge"
-                    width="232px" height="auto" controls="close" no-resize open>
+                    width="232px" height="auto" controls="close" open>
             <div class="pa-winbody">
                 <sac-toolbox class="pa-tools" columns="auto" group="Werkzeuge" value="pencil"></sac-toolbox>
                 <div class="pa-row"><span class="pa-lbl">Pinsel</span>
@@ -395,7 +395,7 @@
         </sac-window>
 
         <sac-window class="pa-win" data-win="palette" title="Palette"
-                    width="232px" height="auto" controls="close" no-resize open>
+                    width="232px" height="auto" controls="close" open>
             <div class="pa-winbody">
                 <sac-segmented-control class="pa-palmode" value="all">
                     <button data-value="all">Alle</button>
@@ -406,7 +406,7 @@
         </sac-window>
 
         <sac-window class="pa-win" data-win="preview" title="Vorschau"
-                    width="280px" height="auto" controls="close" no-resize open>
+                    width="280px" height="auto" controls="close" open>
             <div class="pa-winbody">
                 <div class="pa-pvstage"><sac-pixel-canvas class="pa-pv" static zoom="3"></sac-pixel-canvas></div>
                 <div class="pa-row pa-pvrow">

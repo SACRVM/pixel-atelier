@@ -41,7 +41,16 @@ app-pixel-atelier .pa-lbl {
     color: var(--text-muted);
 }
 /* Selection actions: one row of icons, spread over the window's width. */
-app-pixel-atelier .pa-icons { display: flex; justify-content: space-between; }
+app-pixel-atelier .pa-icons {
+    /* Same measure as the tool box above (sac-toolbox: 32px, 18px icon; 44px on touch). */
+    --icon-btn-size: 32px;
+    --icon-btn-icon: 18px;
+    display: flex;
+    justify-content: space-between;
+}
+@media (pointer: coarse) {
+    app-pixel-atelier .pa-icons { --icon-btn-size: 44px; }
+}
 /* Preview: play and the zoom steps on one line. */
 app-pixel-atelier .pa-pvrow { flex-wrap: nowrap; }
 app-pixel-atelier .pa-pvstage {
