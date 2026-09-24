@@ -52,11 +52,14 @@ app-pixel-atelier .pa-icons {
 app-pixel-atelier .pa-win { --window-padding: 8px; }
 /* Preview: play and the zoom steps on one line. */
 app-pixel-atelier .pa-pvrow { flex-wrap: nowrap; justify-content: center; }
-/* Preview: the window sizes itself to the sprite × zoom, up to 60% of the
-   screen's height; beyond that (and beyond its width) the stage scrolls. */
+/* Preview: the window follows sprite × zoom in both directions, up to a
+   384 × 384 px picture; beyond that the stage scrolls both ways. The
+   controls row sets the window's minimum width. */
 app-pixel-atelier .pa-pvstage {
+    --pv-max: calc(384px + 1rem + 2px);   /* picture + padding + border */
     display: flex;
-    max-height: 60vh;
+    max-width: var(--pv-max);
+    max-height: var(--pv-max);
     padding: 0.5rem;
     overflow: auto;
     border: 1px solid var(--border);

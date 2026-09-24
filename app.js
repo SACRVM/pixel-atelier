@@ -421,7 +421,7 @@
         </sac-window>
 
         <sac-window class="pa-win" data-win="preview" title="Preview" right="14px"
-                    width="256px" height="auto" controls="close" no-resize open>
+                    width="auto" height="auto" controls="close" no-resize open>
             <div class="pa-winbody">
                 <div class="pa-pvstage"><sac-pixel-canvas class="pa-pv" static zoom="3"></sac-pixel-canvas></div>
                 <div class="pa-row">
