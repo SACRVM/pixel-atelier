@@ -58,13 +58,15 @@ app-pixel-atelier .pa-pvstage {
     flex: 1;
     min-height: 0;
     display: flex;
-    justify-content: center;
-    align-items: center;
     padding: 0.5rem;
     overflow: auto;
     border: 1px solid var(--border);
     border-radius: var(--radius-m);
 }
+/* Never squeezed: the sprite keeps zoom × size and the stage scrolls both
+   ways; margin: auto centres it while it fits without cutting off an edge
+   when it does not (justify-content: center would). */
+app-pixel-atelier .pa-pv { flex: none; margin: auto; }
 
 /* ---- frame bar: the kit's filmstrip ---- */
 app-pixel-atelier .pa-film { border-top: 1px solid var(--border); }
