@@ -35,6 +35,12 @@
  *                         methods stay callable regardless.
  *             no-resize — boolean; hides the resize handle and disables
  *                         resizing. Dragging is unaffected.
+ *             no-compact — boolean; opts OUT of the compact rules below: on
+ *                         a narrow screen the window stays a floating
+ *                         window (draggable, its own size, pushed into
+ *                         view) instead of maximizing. For tool palettes and
+ *                         previews over a canvas — an app window that IS the
+ *                         app keeps the default.
  *             snap      — edge snapping while dragging. Within 12px of a
  *                         viewport edge (the top edge = below the nav
  *                         ribbon) the window snaps to it, keeping a gap of
@@ -77,7 +83,7 @@
  * and minimize collapses it to its title bar at the top. The component sets
  * the `compact` attribute meanwhile (styling hook). Back on a wide screen, a
  * window the phone maximized returns to its normal rect; one the user had
- * maximized stays maximized.
+ * maximized stays maximized. A window with `no-compact` skips all of this.
  */
 (function () {
 
@@ -127,7 +133,7 @@ class SacWindow extends HTMLElement {
     static Z_MAX = 18999;         // … below the open nav (19000) and dialogs (20000)
 
     static get observedAttributes() {
-        return ['title', 'width', 'height', 'top', 'left', 'right', 'bottom', 'open', 'minimized', 'maximized'];
+        return ['title', 'width', 'height', 'top', 'left', 'right', 'bottom', 'open', 'minimized', 'maximized', 'no-compact'];
     }
 
     connectedCallback() {
@@ -173,6 +179,7 @@ class SacWindow extends HTMLElement {
             if (newValue !== null) { this._syncCompact(); this._fitIntoView(); }
             return;
         }
+        if (name === 'no-compact') { this._syncCompact(); return; }
 
         // Geometry attributes are LIVE, not write-once: applyAttributes() only
         // FILLS an empty inline style (so it never fights a drag/resize), which
@@ -670,7 +677,7 @@ class SacWindow extends HTMLElement {
 
     _setState(next) {
         // Compact has no normal rect: "restore" means back to maximized.
-        if (next === 'normal' && this._mq.matches) next = 'maximized';
+        if (next === 'normal' && this._isCompact()) next = 'maximized';
         if (next === 'normal') this._autoMax = false;
         const current = this._windowState;
         if (next === current) return;
@@ -695,7 +702,7 @@ class SacWindow extends HTMLElement {
 
         if (next === 'minimized') {
             // Compact: collapse in place at the top, full width.
-            if (this._mq.matches) this._applyMaximizedRect();
+            if (this._isCompact()) this._applyMaximizedRect();
             // Inline height wins over any :host rule, so the collapse is a
             // style swap; width, top and left stay as they were.
             this.style.height = 'auto';
@@ -752,8 +759,13 @@ class SacWindow extends HTMLElement {
     }
 
     /** Compact on/off: maximize on the phone, give the rect back after. */
+    /** Compact rules apply: a narrow viewport, and the window did not opt out. */
+    _isCompact() {
+        return this._mq.matches && !this.hasAttribute('no-compact');
+    }
+
     _syncCompact() {
-        const compact = this._mq.matches;
+        const compact = this._isCompact();
         this.toggleAttribute('compact', compact);
         if (!this.shadowRoot.firstChild) return;
         if (compact && this._windowState === 'normal' && this.hasAttribute('open')) {
