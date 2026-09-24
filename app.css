@@ -3,18 +3,17 @@
    accent comes from app.json via the host (standalone: index.html). */
 
 app-pixel-atelier {
-    display: flex;
-    flex-direction: column;
+    display: block;
     height: 100%;
 }
+/* Standalone the element sits directly in <body class="app-page"> (a flex
+   column); on a desktop the host's .sac-app-view gives it the height. */
 body.app-page > app-pixel-atelier { flex: 1; min-height: 0; }
 
-/* The canvas fills everything between the nav and the frame bar; the
-   floating windows lie over it. */
+/* .main-layout (kit) clears the fixed nav; here it is a column: the canvas
+   fills everything above the frame bar, the floating windows lie over it. */
 app-pixel-atelier .pa-root {
-    flex: 1;
-    min-height: 0;
-    display: flex;
+    height: 100%;
     flex-direction: column;
 }
 app-pixel-atelier .pa-body { position: relative; flex: 1; min-height: 0; }

@@ -376,7 +376,7 @@
     </div>
 </sac-nav>
 
-<div class="pa-root">
+<div class="main-layout pa-root">
     <div class="pa-body">
         <sac-pixel-canvas class="pa-canvas"></sac-pixel-canvas>
         <sac-hud class="pa-hud" position="bottom-left"><span class="pa-meta"></span><span class="pa-coords"></span></sac-hud>
@@ -673,10 +673,12 @@
          * the markup, and the kit keeps right/bottom anchors on resize.
          */
         _placeWindows() {
-            const tools = this._win("tools"), gap = 14;
-            this._win("selection").setAttribute("top", Math.round(tools.getBoundingClientRect().bottom + gap) + "px");
-            const bottom = window.innerHeight - this.$film.getBoundingClientRect().top + gap;
-            this._win("preview").setAttribute("bottom", Math.round(bottom) + "px");
+            // Sizes, not screen positions: the frame bar always sits at the
+            // viewport's bottom edge, and tools always starts at top="64px" —
+            // true however (and whenever) the host lays the app out.
+            const gap = 14, toolsH = this._win("tools").offsetHeight || 160;
+            this._win("selection").setAttribute("top", (64 + toolsH + gap) + "px");
+            this._win("preview").setAttribute("bottom", ((this.$film.offsetHeight || 80) + gap) + "px");
         }
 
         /* ---------------------------------------------------- document ---- */
