@@ -421,8 +421,8 @@
         </sac-window>
 
         <sac-window class="pa-win" data-win="preview" title="Preview" right="14px"
-                    width="300px" height="auto" controls="close" open>
-            <div class="pa-winbody pa-pvbody">
+                    width="256px" height="auto" controls="close" no-resize open>
+            <div class="pa-winbody">
                 <div class="pa-pvstage"><sac-pixel-canvas class="pa-pv" static zoom="3"></sac-pixel-canvas></div>
                 <div class="pa-row">
                     <button type="button" class="icon-btn pa-pvplay" title="Play"><sac-icon name="play"></sac-icon></button>
@@ -430,7 +430,7 @@
                 </div>
                 <div class="pa-row pa-pvrow">
                     <sac-segmented-control class="pa-pvzoom" value="3">
-                        <button data-value="1">1×</button><button data-value="2">2×</button><button data-value="3">3×</button><button data-value="4">4×</button><button data-value="6">6×</button><button data-value="8">8×</button>
+                        <button data-value="1">1×</button><button data-value="2">2×</button><button data-value="3">3×</button><button data-value="4">4×</button><button data-value="5">5×</button>
                     </sac-segmented-control>
                 </div>
             </div>
@@ -1081,8 +1081,8 @@
             this._touch();
         }
         _setPvZoom(z) {
-            // The kit's zoom ladder (1 2 3 4 6 8 …) — the steps the buttons offer.
-            this.pvZoom = [1, 2, 3, 4, 6, 8].includes(z) ? z : 3;
+            // The Atelier's steps, 1× … 5×.
+            this.pvZoom = clamp(Math.round(z) || 3, 1, 5);
             this.querySelector(".pa-pvzoom").value = String(this.pvZoom);
             this.$pv.setAttribute("zoom", String(this.pvZoom));
             this.$pv.render();   // a static canvas re-sizes itself on render()

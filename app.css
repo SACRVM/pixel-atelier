@@ -51,13 +51,12 @@ app-pixel-atelier .pa-icons {
 /* Tool palettes: the kit's tight window padding. */
 app-pixel-atelier .pa-win { --window-padding: 8px; }
 /* Preview: play and the zoom steps on one line. */
-app-pixel-atelier .pa-pvrow { flex-wrap: nowrap; }
-/* Preview: the stage takes whatever the window gives it — resize to see more. */
-app-pixel-atelier .pa-pvbody { height: 100%; }
+app-pixel-atelier .pa-pvrow { flex-wrap: nowrap; justify-content: center; }
+/* Preview: the window sizes itself to the sprite × zoom, up to 60% of the
+   screen's height; beyond that (and beyond its width) the stage scrolls. */
 app-pixel-atelier .pa-pvstage {
-    flex: 1;
-    min-height: 0;
     display: flex;
+    max-height: 60vh;
     padding: 0.5rem;
     overflow: auto;
     border: 1px solid var(--border);
