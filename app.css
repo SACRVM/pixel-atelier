@@ -1,0 +1,76 @@
+/* Pixel Atelier — scoped to the app element, never :root (the app would
+   repaint the desktop around it). Tokens only: no raw colours below. The
+   accent comes from app.json via the host (standalone: index.html). */
+
+app-pixel-atelier {
+    display: block;
+    height: 100%;
+}
+body.app-page > app-pixel-atelier { flex: 1; min-height: 0; }
+
+app-pixel-atelier .pa-root { height: 100%; min-height: 0; }
+app-pixel-atelier .pa-split { flex: 1; min-width: 0; min-height: 0; }
+app-pixel-atelier .pa-panel:not([open]) { border-right: none; }
+
+/* Canvas on top, filmstrip below; the canvas takes what is left. */
+app-pixel-atelier .pa-work {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+app-pixel-atelier .pa-viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+}
+app-pixel-atelier .pa-canvas { position: absolute; inset: 0; }
+app-pixel-atelier .pa-film { border-top: 1px solid var(--border); }
+app-pixel-atelier .pa-film-ctrl { display: flex; gap: 4px; }
+
+app-pixel-atelier .icon-btn.active,
+app-pixel-atelier .nav-icon-btn.active {
+    background: var(--accent-tint);
+    color: var(--accent-text);
+}
+
+/* The document's name in the ribbon; a dot while there is unsaved work. */
+app-pixel-atelier .pa-docname {
+    max-width: 22ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+app-pixel-atelier .pa-docname.dirty::after { content: " •"; color: var(--accent-text); }
+
+app-pixel-atelier .pa-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+app-pixel-atelier .pa-row label { margin: 0; }
+app-pixel-atelier .pa-stack { display: flex; flex-direction: column; gap: 0.75rem; }
+app-pixel-atelier .pa-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+app-pixel-atelier .pa-preview {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 4rem;
+    padding: 0.75rem;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+}
+
+/* Dialogs are appended to <body>, outside the app element. */
+.pa-form { display: flex; flex-direction: column; gap: 0.75rem; min-width: 260px; }
+.pa-form .pa-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.pa-form .pa-row label { margin: 0; }
+.pa-form .pa-note { margin: 0; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pa-form sac-drop-zone { --drop-zone-min-height: 96px; }

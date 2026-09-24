@@ -1,0 +1,11 @@
+{
+    "id": "pixel-atelier",
+    "name": "Pixel Atelier",
+    "icon": "palette",
+    "accent": "#e6a341",
+    "description": "A pixel and sprite editor — layers, frames, onion skin, palettes; saves plain PNG strips.",
+    "kind": "view",
+    "tag": "app-pixel-atelier",
+    "entry": "app.js",
+    "version": "0.1.0"
+}
