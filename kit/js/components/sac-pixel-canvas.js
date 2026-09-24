@@ -29,16 +29,23 @@
  *
  * Attributes:
  *   zoom       — integer CSS px per image pixel. Reflected on every change.
- *                Omit it and the view fits the image on first show.
+ *                Omit it and the view fits the image on first show. Values
+ *                off the ladder (1 2 3 4 6 8 12 16 24 32 48 64 96 128, within
+ *                min/max-zoom) snap to the nearest step, a tie going down —
+ *                5 becomes 4, 10 becomes 8. A STATIC canvas has no ladder:
+ *                any integer within min/max-zoom is taken as is (a 5× preview
+ *                is 5×), and a zoom change re-sizes the element.
  *   min-zoom / max-zoom — ladder bounds, default 1 / 64.
  *   grid       — "auto" (default: pixel grid from zoom 8), "on", "off".
  *   tile-grid  — N: a stronger line every N image pixels (8, 16 …). Measured
  *                from the region's origin, so a frame of a strip gets its own.
  *   brush      — size of the hover box in image pixels (default 1; "0" hides
  *                it). Centered like a square brush: size 3 covers x-1 … x+1.
- *   static     — a preview: no input, no pan, and the element sizes ITSELF to
+ *   static     — a preview: no drawing, no own pan, and the element sizes ITSELF to
  *                region × zoom (so <sac-pixel-canvas static zoom="3"> is the
- *                small live preview next to the big one).
+ *                small live preview next to the big one). Larger than its box
+ *                (a scrolling window, a panel), it pans that box on a middle-
+ *                drag — the editor's gesture; touch scrolls natively.
  *
  * Properties (setting any of them redraws):
  *   image      — the pixels: ImageData, {width, height, data}, an
@@ -305,6 +312,9 @@
         /** Snap any number onto the ladder, inside the bounds. */
         _snap(z) {
             const { min, max } = this._bounds();
+            // A static preview is sized by the app to an exact multiple — no
+            // wheel or pinch steps it, so any integer is taken as is.
+            if (this.hasAttribute("static")) return Math.max(min, Math.min(max, Math.round(z) || min));
             const steps = LADDER.filter((s) => s >= min && s <= max);
             if (!steps.length) return min;
             let best = steps[0];
@@ -367,6 +377,16 @@
         /** Change zoom keeping the anchor's image point under it. */
         _setZoom(nz, anchor, fromAttr) {
             if (!nz) return;
+            // A static preview sizes itself to region × zoom: a new zoom is a
+            // new size, not a pan around an anchor. Reflect first, so
+            // _resize() reads the new attribute.
+            if (this.hasAttribute("static")) {
+                if (nz === this._zoom) return;
+                this._zoom = nz;
+                this._reflect(fromAttr);
+                this._resize();
+                return;
+            }
             const old = this.zoom;
             if (!this._zoom) { this._zoom = nz; this.center(); this._reflect(fromAttr); return; }
             if (nz === old) return;
@@ -601,7 +621,20 @@
         }
 
         _down(e) {
-            if (this.hasAttribute("static")) return;
+            if (this.hasAttribute("static")) {
+                // A preview larger than its box sits in a scroller (a window,
+                // a panel). Middle-drag moves THAT, the way the editor pans —
+                // same hand, same gesture.
+                if (e.button !== 1) return;
+                const el = this._scroller();
+                if (!el) return;
+                e.preventDefault();
+                try { this._top.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
+                this._scrollPan = { pointerId: e.pointerId, x: e.clientX, y: e.clientY,
+                                    sl: el.scrollLeft, st: el.scrollTop, el };
+                this.classList.add("grabbing");
+                return;
+            }
             if (e.pointerType === "touch") {
                 this._touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
                 if (this._touches.size === 2) { this._startPinch(); return; }
@@ -625,6 +658,12 @@
         }
 
         _move(e) {
+            const sp = this._scrollPan;
+            if (sp && e.pointerId === sp.pointerId) {
+                sp.el.scrollLeft = sp.sl - (e.clientX - sp.x);
+                sp.el.scrollTop = sp.st - (e.clientY - sp.y);
+                return;
+            }
             if (e.pointerType === "touch" && this._touches.has(e.pointerId)) {
                 this._touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
                 if (this._pinch) { this._pinchMove(); return; }
@@ -647,6 +686,11 @@
         }
 
         _up(e, cancelled) {
+            if (this._scrollPan && e.pointerId === this._scrollPan.pointerId) {
+                this._scrollPan = null;
+                this.classList.remove("grabbing");
+                return;
+            }
             if (e.pointerType === "touch") {
                 this._touches.delete(e.pointerId);
                 if (this._pinch) { if (this._touches.size < 2) { this._pinch = null; this._drawTop(); } return; }
@@ -663,6 +707,23 @@
                 this._emit(cancelled ? "cancel" : "up", c);
                 if (e.pointerType === "touch") this._setHover(null);
             }
+        }
+
+        /** The nearest ancestor that actually scrolls — across shadow roots
+         *  (a canvas slotted into a <sac-window> scrolls its content box). */
+        _scroller() {
+            let node = this;
+            while (node) {
+                node = node.assignedSlot || node.parentElement
+                    || (node.getRootNode && node.getRootNode().host) || null;
+                if (!node || node.nodeType !== 1) break;
+                const cs = getComputedStyle(node);
+                const sx = /(auto|scroll)/.test(cs.overflowX) && node.scrollWidth > node.clientWidth;
+                const sy = /(auto|scroll)/.test(cs.overflowY) && node.scrollHeight > node.clientHeight;
+                if (sx || sy) return node;
+            }
+            const doc = document.scrollingElement;
+            return doc && (doc.scrollHeight > doc.clientHeight || doc.scrollWidth > doc.clientWidth) ? doc : null;
         }
 
         _startPinch() {
