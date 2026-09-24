@@ -52,12 +52,16 @@ app-pixel-atelier .pa-icons {
 app-pixel-atelier .pa-win { --window-padding: 8px; }
 /* Preview: play and the zoom steps on one line. */
 app-pixel-atelier .pa-pvrow { flex-wrap: nowrap; }
+/* Preview: the stage takes whatever the window gives it — resize to see more. */
+app-pixel-atelier .pa-pvbody { height: 100%; }
 app-pixel-atelier .pa-pvstage {
+    flex: 1;
+    min-height: 0;
     display: flex;
     justify-content: center;
+    align-items: center;
     padding: 0.5rem;
     overflow: auto;
-    max-height: 50vh;
     border: 1px solid var(--border);
     border-radius: var(--radius-m);
 }
