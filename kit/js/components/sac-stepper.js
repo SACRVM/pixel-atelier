@@ -24,6 +24,8 @@
  *   max      — default 100.
  *   step     — default 1. Fractional steps (e.g. "0.1") are supported; the
  *              displayed/reflected value keeps that many decimal places.
+ *   decimals — minimum decimal places shown ("1.00" with decimals="2" on a
+ *              0.5 step). Never fewer than the step needs.
  *   unit     — optional word shown dim next to the value ("parts", "px").
  *   label    — accessible name for the value field (its aria-label).
  *   disabled — presence disables both buttons and the value field.
@@ -52,6 +54,11 @@
  *   - ArrowUp/ArrowDown on the value field step by `step`; Shift steps by
  *     10× that.
  *
+ * Width: the value field sizes itself to the widest value the range can
+ * show (min, max, at the displayed precision), never below 3ch — "12.50"
+ * or "-0.356" are never cut off. Override with --stepper-value-width on the
+ * element; ::part(value) reaches the field itself.
+ *
  * Compact/touch: the ± buttons are pointer-event driven (press-and-hold works
  * with a finger; a long press never opens the context menu). Under
  * (pointer: coarse) the pill is 44px tall with 38px buttons whose hit halo
@@ -75,7 +82,7 @@
 
 class SacStepper extends HTMLElement {
     static get observedAttributes() {
-        return ["value", "min", "max", "step", "unit", "label", "disabled"];
+        return ["value", "min", "max", "step", "decimals", "unit", "label", "disabled"];
     }
 
     constructor() {
@@ -115,6 +122,7 @@ class SacStepper extends HTMLElement {
             case "min":
             case "max":
             case "step":
+            case "decimals":
                 this._applyValue();
                 break;
             case "unit":
@@ -165,6 +173,12 @@ class SacStepper extends HTMLElement {
         return i === -1 ? 0 : s.length - i - 1;
     }
 
+    /** Displayed decimal places: the step's, raised by `decimals`. */
+    _decimals() {
+        const d = parseInt(this.getAttribute("decimals"), 10);
+        return Math.max(this._stepDecimals(), Number.isFinite(d) && d > 0 ? Math.min(d, 10) : 0);
+    }
+
     /** Clamp into [min, max] AND snap to the nearest valid step measured
      *  from min — the one place every value in this component passes
      *  through, so the reflected attribute is always on-grid and in-range. */
@@ -172,7 +186,7 @@ class SacStepper extends HTMLElement {
         const min = this._minAttr();
         const max = this._maxAttr();
         const step = this._stepAttr();
-        const decimals = this._stepDecimals();
+        const decimals = this._decimals();
         let v = Number.isFinite(n) ? n : min;
         v = min + Math.round((v - min) / step) * step;
         v = Math.min(max, Math.max(min, v));
@@ -187,7 +201,7 @@ class SacStepper extends HTMLElement {
     }
 
     _format(n) {
-        const decimals = this._stepDecimals();
+        const decimals = this._decimals();
         return decimals > 0 ? n.toFixed(decimals) : String(Math.round(n));
     }
 
@@ -271,7 +285,7 @@ class SacStepper extends HTMLElement {
                     padding: 0 2px;
                 }
                 .value-input {
-                    width: 3ch;
+                    width: var(--stepper-value-width, var(--_auto-width, 3ch));
                     box-sizing: content-box;
                     border: none;
                     background: transparent;
@@ -343,7 +357,7 @@ class SacStepper extends HTMLElement {
             <div class="stepper">
                 <button type="button" class="btn minus" aria-label="${L.decrease}"><span class="glyph" aria-hidden="true">−</span></button>
                 <span class="center">
-                    <input type="text" inputmode="numeric" autocomplete="off" spellcheck="false" class="value-input" role="spinbutton" />
+                    <input type="text" inputmode="numeric" autocomplete="off" spellcheck="false" class="value-input" part="value" role="spinbutton" />
                     <span class="unit"></span>
                 </span>
                 <button type="button" class="btn plus" aria-label="${L.increase}"><span class="glyph" aria-hidden="true">+</span></button>
@@ -384,9 +398,20 @@ class SacStepper extends HTMLElement {
             this.setAttribute("value", formatted);   // re-enters via attributeChangedCallback, now canonical
             return;
         }
+        this._syncWidth();
         this._syncDisplay();
         this._syncAria();
         this._syncButtons();
+    }
+
+    /** Fit the field to the widest value the range can show; a fractional
+     *  range gets the decimal keypad on touch. */
+    _syncWidth() {
+        if (!this._input) return;
+        const chars = Math.max(3,
+            this._format(this._minAttr()).length, this._format(this._maxAttr()).length);
+        this._input.style.setProperty("--_auto-width", `${chars}ch`);
+        this._input.inputMode = this._decimals() > 0 ? "decimal" : "numeric";
     }
 
     /** Never clobbers text the user is actively typing. */
