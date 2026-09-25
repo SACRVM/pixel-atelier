@@ -35,8 +35,8 @@ close them, and bring them back from the top bar.
 - **Speed:** set the animation's frames per second in the preview window.
   It is saved with the sprite.
 
-Language switching is planned as one solution for all SACRVM APPKIT apps;
-until then the UI is English.
+The UI speaks English and German and follows the page's language, which is
+switched once for all SACRVM APPKIT apps (on a desktop, by the desktop).
 
 ## Files
 

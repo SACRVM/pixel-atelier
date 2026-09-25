@@ -42,19 +42,157 @@
 
     // The Atelier's tool box, in its order.
     const TOOLS = [
-        { id: "pencil",      icon: "pencil",      label: "Pencil",                key: "b" },
-        { id: "eraser",      icon: "eraser",      label: "Eraser",                key: "e" },
-        { id: "line",        icon: "line",        label: "Line",                  key: "l" },
-        { id: "rect",        icon: "square",      label: "Rectangle",             key: "r" },
-        { id: "rectfill",    icon: "square-fill", label: "Filled rectangle" },
-        { id: "ellipse",     icon: "circle",      label: "Ellipse",               key: "c" },
-        { id: "ellipsefill", icon: "circle-fill", label: "Filled ellipse" },
-        { id: "fill",        icon: "bucket",      label: "Fill",                  key: "g" },
-        { id: "pick",        icon: "eyedropper",  label: "Eyedropper",            key: "i" },
-        { id: "select",      icon: "marquee",     label: "Select · move",         key: "m" },
+        { id: "pencil",      icon: "pencil",      label: "Pencil", lkey: "tool.pencil",                key: "b" },
+        { id: "eraser",      icon: "eraser",      label: "Eraser", lkey: "tool.eraser",                key: "e" },
+        { id: "line",        icon: "line",        label: "Line", lkey: "tool.line",                  key: "l" },
+        { id: "rect",        icon: "square",      label: "Rectangle", lkey: "tool.rect",             key: "r" },
+        { id: "rectfill",    icon: "square-fill", label: "Filled rectangle", lkey: "tool.rectfill" },
+        { id: "ellipse",     icon: "circle",      label: "Ellipse", lkey: "tool.ellipse",               key: "c" },
+        { id: "ellipsefill", icon: "circle-fill", label: "Filled ellipse", lkey: "tool.ellipsefill" },
+        { id: "fill",        icon: "bucket",      label: "Fill", lkey: "tool.fill",                  key: "g" },
+        { id: "pick",        icon: "eyedropper",  label: "Eyedropper", lkey: "tool.pick",            key: "i" },
+        { id: "select",      icon: "marquee",     label: "Select · move", lkey: "tool.select",         key: "m" },
     ];
     const SHAPES = new Set(["line", "rect", "rectfill", "ellipse", "ellipsefill"]);
     const BRUSHED = new Set(["pencil", "eraser", "line", "rect", "rectfill", "ellipse", "ellipsefill"]);
+
+    /* Every string the app shows: [English, German]. English is the fallback
+       in the code; German goes to the kit (sac.i18n.add), and sac.t picks the
+       page's current language (sac.lang — owned by the host, like the theme). */
+    const STRINGS = {
+        "win.tools": ["Tools", "Werkzeuge"],
+        "win.selection": ["Selection", "Auswahl"],
+        "win.palette": ["Palette", "Palette"],
+        "win.preview": ["Preview", "Vorschau"],
+        "nav.undo": ["Undo (Ctrl+Z)", "Rückgängig (Strg+Z)"],
+        "nav.redo": ["Redo (Ctrl+Y)", "Wiederholen (Strg+Y)"],
+        "nav.zoomOut": ["Zoom out (−)", "Verkleinern (−)"],
+        "nav.fit": ["Fit", "Einpassen"],
+        "nav.zoomIn": ["Zoom in (+)", "Vergrößern (+)"],
+        "nav.new": ["New sprite…", "Neues Sprite…"],
+        "nav.open": ["Open… (Ctrl+O)", "Öffnen… (Strg+O)"],
+        "nav.save": ["Save (Ctrl+S)", "Speichern (Strg+S)"],
+        "nav.keys": ["Keyboard shortcuts (?)", "Tastenkürzel (?)"],
+        "nav.more": ["More", "Mehr"],
+        "menu.saveAs": ["Save as…", "Speichern unter…"],
+        "menu.revert": ["Revert to saved", "Auf gespeicherten Stand zurücksetzen"],
+        "tool.pencil": ["Pencil", "Stift"],
+        "tool.eraser": ["Eraser", "Radierer"],
+        "tool.line": ["Line", "Linie"],
+        "tool.rect": ["Rectangle", "Rechteck"],
+        "tool.rectfill": ["Filled rectangle", "Gefülltes Rechteck"],
+        "tool.ellipse": ["Ellipse", "Ellipse"],
+        "tool.ellipsefill": ["Filled ellipse", "Gefüllte Ellipse"],
+        "tool.fill": ["Fill", "Füllen"],
+        "tool.pick": ["Eyedropper", "Pipette"],
+        "tool.select": ["Select · move", "Auswählen · verschieben"],
+        "brush": ["Brush", "Pinsel"],
+        "sel.flipH": ["Flip horizontal (Shift+H)", "Waagerecht spiegeln (Umschalt+H)"],
+        "sel.flipV": ["Flip vertical (Shift+V)", "Senkrecht spiegeln (Umschalt+V)"],
+        "sel.copy": ["Copy (Ctrl+C)", "Kopieren (Strg+C)"],
+        "sel.cut": ["Cut (Ctrl+X)", "Ausschneiden (Strg+X)"],
+        "sel.paste": ["Paste in place (Ctrl+V)", "An gleicher Stelle einfügen (Strg+V)"],
+        "sel.trim": ["Trim the selection to its object", "Auswahl auf das Objekt zuschneiden"],
+        "pal.all": ["All", "Alle"],
+        "pal.used": ["Used", "Verwendet"],
+        "pal.load": ["Load palette… (.gpl, .hex or an image)", "Palette laden… (.gpl, .hex oder ein Bild)"],
+        "pal.transparent": ["Transparent (eraser color)", "Transparent (Radiererfarbe)"],
+        "play": ["Play", "Abspielen"],
+        "pause": ["Pause", "Anhalten"],
+        "fps": ["Playback speed", "Abspieltempo"],
+        "onion": ["Onion skin (O)", "Onion-Skin (O)"],
+        "ctx.copy": ["Copy", "Kopieren"],
+        "ctx.cut": ["Cut", "Ausschneiden"],
+        "ctx.paste": ["Paste", "Einfügen"],
+        "ctx.flipH": ["Flip horizontal", "Waagerecht spiegeln"],
+        "ctx.flipV": ["Flip vertical", "Senkrecht spiegeln"],
+        "ctx.trim": ["Trim selection", "Auswahl zuschneiden"],
+        "ctx.selectAll": ["Select whole frame", "Ganzen Frame auswählen"],
+        "ctx.dupFrame": ["Duplicate frame", "Frame duplizieren"],
+        "ctx.addFrame": ["Add frame", "Frame hinzufügen"],
+        "ctx.deleteFrame": ["Delete frame", "Frame löschen"],
+        "hud.frames": ["frames", "Frames"],
+        "g.edit": ["Edit", "Bearbeiten"],
+        "g.file": ["File", "Datei"],
+        "g.selection": ["Selection", "Auswahl"],
+        "g.view": ["View", "Ansicht"],
+        "g.tools": ["Tools", "Werkzeuge"],
+        "g.frames": ["Frames", "Frames"],
+        "k.undo": ["Undo", "Rückgängig"],
+        "k.redo": ["Redo", "Wiederholen"],
+        "k.save": ["Save", "Speichern"],
+        "k.saveAs": ["Save as…", "Speichern unter…"],
+        "k.open": ["Open…", "Öffnen…"],
+        "k.selectAll": ["Select the whole frame", "Ganzen Frame auswählen"],
+        "k.flipH": ["Flip horizontal", "Waagerecht spiegeln"],
+        "k.flipV": ["Flip vertical", "Senkrecht spiegeln"],
+        "k.drop": ["Drop the selection", "Auswahl aufheben"],
+        "k.clear": ["Clear the selection", "Auswahl leeren"],
+        "k.zoomIn": ["Zoom in", "Vergrößern"],
+        "k.zoomOut": ["Zoom out", "Verkleinern"],
+        "k.brushDown": ["Smaller brush", "Kleinerer Pinsel"],
+        "k.brushUp": ["Bigger brush", "Größerer Pinsel"],
+        "k.nudge": ["Nudge the selection", "Auswahl verschieben"],
+        "k.prevFrame": ["Previous frame", "Vorheriger Frame"],
+        "k.nextFrame": ["Next frame", "Nächster Frame"],
+        "k.frameN": ["Frame 1 … 10", "Frame 1 … 10"],
+        "k.onion": ["Onion skin", "Onion-Skin"],
+        "x.panDrag": ["Space + drag", "Leertaste + ziehen"],
+        "x.middleDrag": ["Middle-drag", "Mittlere Maustaste ziehen"],
+        "x.wheel": ["Wheel", "Mausrad"],
+        "x.click": ["click", "Klick"],
+        "x.shift": ["Shift", "Umschalt"],
+        "x.pan": ["Pan", "Verschieben"],
+        "x.zoomCursor": ["Zoom at the cursor", "Am Mauszeiger zoomen"],
+        "x.pick": ["Pick a color with any tool", "Farbe aufnehmen, mit jedem Werkzeug"],
+        "x.line": ["Pencil / eraser: line from the last point", "Stift / Radierer: Linie vom letzten Punkt"],
+        "x.copy": ["Copy", "Kopieren"],
+        "x.cut": ["Cut", "Ausschneiden"],
+        "x.paste": ["Paste in place, also images from other apps", "An gleicher Stelle einfügen, auch Bilder aus anderen Apps"],
+        "sheet.title": ["Pixel Atelier shortcuts", "Pixel Atelier – Tastenkürzel"],
+        "t.copied": ["Copied", "Kopiert"],
+        "t.pasted": ["Pasted — drag it or use the arrows to place it", "Eingefügt — ziehen oder mit den Pfeiltasten platzieren"],
+        "t.unreadable": ["The image could not be read", "Das Bild konnte nicht gelesen werden"],
+        "t.frameAdded": ["Frame added", "Frame hinzugefügt"],
+        "t.frameDuplicated": ["Frame duplicated", "Frame dupliziert"],
+        "t.frameDeleted": ["Frame deleted", "Frame gelöscht"],
+        "t.restored": ["Unsaved work restored", "Ungespeicherte Arbeit wiederhergestellt"],
+        "t.noFiles": ["This host offers no files.", "Diese Umgebung bietet keine Dateien an."],
+        "t.tooBig": ["Frames can be at most {n}×{n} px", "Frames dürfen höchstens {n}×{n} px groß sein"],
+        "t.downloaded": ["Downloaded {name}", "{name} heruntergeladen"],
+        "t.saved": ["Saved {name}", "{name} gespeichert"],
+        "t.nothingSaved": ["Nothing saved yet", "Noch nichts gespeichert"],
+        "t.reverted": ["Reverted to the saved state", "Auf den gespeicherten Stand zurückgesetzt"],
+        "t.noColors": ["No colors found in {name}", "Keine Farben in {name} gefunden"],
+        "t.paletteLoaded": ["Palette loaded: {n} colors", "Palette geladen: {n} Farben"],
+        "d.discardTitle": ["Discard unsaved changes?", "Ungespeicherte Änderungen verwerfen?"],
+        "d.notSaved": ["This sprite has not been saved yet.", "Dieses Sprite ist noch nicht gespeichert."],
+        "d.cancel": ["Cancel", "Abbrechen"],
+        "d.discard": ["Discard", "Verwerfen"],
+        "d.newTitle": ["New sprite", "Neues Sprite"],
+        "d.width": ["Width", "Breite"],
+        "d.height": ["Height", "Höhe"],
+        "d.frames": ["Frames", "Frames"],
+        "d.drop": ["…or drop an image here to open it", "…oder ein Bild hier ablegen, um es zu öffnen"],
+        "d.dropTouch": ["…or open an image", "…oder ein Bild öffnen"],
+        "d.create": ["Create", "Anlegen"],
+        "d.openTitle": ["Open a sprite", "Sprite öffnen"],
+        "d.stripQuestion": ["{w}×{h} px. Frames sit side by side in a strip — how many are there?", "{w}×{h} px. Die Frames liegen nebeneinander in einem Streifen — wie viele sind es?"],
+        "d.open": ["Open", "Öffnen"],
+        "d.revertTitle": ["Revert to saved?", "Auf gespeicherten Stand zurücksetzen?"],
+        "d.revertMsg": ["Every change since the last save is lost.", "Alle Änderungen seit dem letzten Speichern gehen verloren."],
+        "d.revert": ["Revert", "Zurücksetzen"],
+        "d.loadPalette": ["Load palette", "Palette laden"],
+    };
+    if (sac.i18n && typeof sac.i18n.add === "function") {
+        sac.i18n.add("de", Object.fromEntries(Object.entries(STRINGS).map(([k, v]) => ["pixel-atelier." + k, v[1]])));
+    }
+    /** A string in the page's language; {name} placeholders filled from `vars`. */
+    const L = (key, vars) => {
+        const en = STRINGS[key] ? STRINGS[key][0] : key;
+        const s = sac.t ? sac.t("pixel-atelier." + key, en) : en;
+        return vars ? s.replace(/\{(\w+)\}/g, (m, v) => (v in vars ? vars[v] : m)) : s;
+    };
 
     const hexToRgba = (h) => {
         if (!h || h === "transparent") return [0, 0, 0, 0];
@@ -355,23 +493,23 @@
             this.innerHTML = `
 <sac-nav brand="PIXEL ATELIER" brand-icon="palette" brand-href="#/" host-nav="wide">
     <div slot="toolbar" class="toolbar">
-        <button type="button" class="nav-icon-btn pa-toggle active" data-win="tools" title="Tools"><sac-icon name="pencil"></sac-icon></button>
-        <button type="button" class="nav-icon-btn pa-toggle active" data-win="selection" title="Selection"><sac-icon name="marquee"></sac-icon></button>
-        <button type="button" class="nav-icon-btn pa-toggle active" data-win="palette" title="Palette"><sac-icon name="palette"></sac-icon></button>
-        <button type="button" class="nav-icon-btn pa-toggle active" data-win="preview" title="Preview"><sac-icon name="eye"></sac-icon></button>
-        <button type="button" class="nav-icon-btn pa-undo" title="Undo (Ctrl+Z)"><sac-icon name="undo"></sac-icon></button>
-        <button type="button" class="nav-icon-btn pa-redo" title="Redo (Ctrl+Y)"><sac-icon name="redo"></sac-icon></button>
-        <button type="button" class="nav-icon-btn pa-zout" title="Zoom out (−)"><sac-icon name="zoom-out"></sac-icon></button>
-        <button type="button" class="nav-icon-btn pa-fit" title="Fit"><sac-icon name="fit"></sac-icon></button>
-        <button type="button" class="nav-icon-btn pa-zin" title="Zoom in (+)"><sac-icon name="zoom-in"></sac-icon></button>
-        <button type="button" class="nav-icon-btn pa-new" title="New sprite…"><sac-icon name="plus"></sac-icon></button>
-        <button type="button" class="nav-icon-btn pa-open" title="Open… (Ctrl+O)"><sac-icon name="folder"></sac-icon></button>
-        <button type="button" class="nav-icon-btn pa-save" title="Save (Ctrl+S)"><sac-icon name="save"></sac-icon></button>
-        <button type="button" class="nav-icon-btn pa-keys" title="Keyboard shortcuts (?)"><sac-icon name="keyboard"></sac-icon></button>
+        <button type="button" class="nav-icon-btn pa-toggle active" data-win="tools" title="Tools" data-lt="win.tools"><sac-icon name="pencil"></sac-icon></button>
+        <button type="button" class="nav-icon-btn pa-toggle active" data-win="selection" title="Selection" data-lt="win.selection"><sac-icon name="marquee"></sac-icon></button>
+        <button type="button" class="nav-icon-btn pa-toggle active" data-win="palette" title="Palette" data-lt="win.palette"><sac-icon name="palette"></sac-icon></button>
+        <button type="button" class="nav-icon-btn pa-toggle active" data-win="preview" title="Preview" data-lt="win.preview"><sac-icon name="eye"></sac-icon></button>
+        <button type="button" class="nav-icon-btn pa-undo" title="Undo (Ctrl+Z)" data-lt="nav.undo"><sac-icon name="undo"></sac-icon></button>
+        <button type="button" class="nav-icon-btn pa-redo" title="Redo (Ctrl+Y)" data-lt="nav.redo"><sac-icon name="redo"></sac-icon></button>
+        <button type="button" class="nav-icon-btn pa-zout" title="Zoom out (−)" data-lt="nav.zoomOut"><sac-icon name="zoom-out"></sac-icon></button>
+        <button type="button" class="nav-icon-btn pa-fit" title="Fit" data-lt="nav.fit"><sac-icon name="fit"></sac-icon></button>
+        <button type="button" class="nav-icon-btn pa-zin" title="Zoom in (+)" data-lt="nav.zoomIn"><sac-icon name="zoom-in"></sac-icon></button>
+        <button type="button" class="nav-icon-btn pa-new" title="New sprite…" data-lt="nav.new"><sac-icon name="plus"></sac-icon></button>
+        <button type="button" class="nav-icon-btn pa-open" title="Open… (Ctrl+O)" data-lt="nav.open"><sac-icon name="folder"></sac-icon></button>
+        <button type="button" class="nav-icon-btn pa-save" title="Save (Ctrl+S)" data-lt="nav.save"><sac-icon name="save"></sac-icon></button>
+        <button type="button" class="nav-icon-btn pa-keys" title="Keyboard shortcuts (?)" data-lt="nav.keys"><sac-icon name="keyboard"></sac-icon></button>
         <sac-menu class="pa-menu">
-            <button slot="trigger" type="button" class="nav-icon-btn" title="More"><sac-icon name="more"></sac-icon></button>
-            <button data-action="save-as"><sac-icon name="save"></sac-icon> Save as…</button>
-            <button data-action="revert" data-danger><sac-icon name="undo"></sac-icon> Revert to saved</button>
+            <button slot="trigger" type="button" class="nav-icon-btn" title="More" data-lt="nav.more"><sac-icon name="more"></sac-icon></button>
+            <button data-action="save-as"><sac-icon name="save"></sac-icon> <span data-l="menu.saveAs">Save as…</span></button>
+            <button data-action="revert" data-danger><sac-icon name="undo"></sac-icon> <span data-l="menu.revert">Revert to saved</span></button>
         </sac-menu>
     </div>
 </sac-nav>
@@ -381,52 +519,52 @@
         <sac-pixel-canvas class="pa-canvas"></sac-pixel-canvas>
         <sac-hud class="pa-hud" position="bottom-left"><span class="pa-meta"></span><span class="pa-coords"></span></sac-hud>
 
-        <sac-window class="pa-win" data-win="tools" title="Tools" left="14px" top="64px"
+        <sac-window class="pa-win" data-win="tools" title="Tools" data-lw="win.tools" left="14px" top="64px"
                     width="232px" height="auto" controls="close" snap="14" no-compact open>
             <div class="pa-winbody">
-                <sac-toolbox class="pa-tools" columns="auto" group="Tools" value="pencil"></sac-toolbox>
-                <div class="pa-row"><span class="pa-lbl">Brush</span>
+                <sac-toolbox class="pa-tools" columns="auto" group="Tools" data-lg="g.tools" value="pencil"></sac-toolbox>
+                <div class="pa-row"><span class="pa-lbl" data-l="brush">Brush</span>
                     <sac-segmented-control class="pa-brush" value="1">
                         <button data-value="1">1</button><button data-value="2">2</button><button data-value="3">3</button><button data-value="4">4</button>
                     </sac-segmented-control></div>
             </div>
         </sac-window>
 
-        <sac-window class="pa-win" data-win="selection" title="Selection" left="14px"
+        <sac-window class="pa-win" data-win="selection" title="Selection" data-lw="win.selection" left="14px"
                     width="232px" height="auto" controls="close" snap="14" no-compact open>
             <div class="pa-winbody">
                 <div class="pa-icons">
-                    <button type="button" class="icon-btn tool pa-fliph" title="Flip horizontal (Shift+H)"><sac-icon name="flip-h"></sac-icon></button>
-                    <button type="button" class="icon-btn tool pa-flipv" title="Flip vertical (Shift+V)"><sac-icon name="flip-v"></sac-icon></button>
-                    <button type="button" class="icon-btn tool pa-copyb" title="Copy (Ctrl+C)"><sac-icon name="copy"></sac-icon></button>
-                    <button type="button" class="icon-btn tool pa-cutb" title="Cut (Ctrl+X)"><sac-icon name="scissors"></sac-icon></button>
-                    <button type="button" class="icon-btn tool pa-pasteb" title="Paste in place (Ctrl+V)"><sac-icon name="paste"></sac-icon></button>
-                    <button type="button" class="icon-btn tool pa-trimb" title="Trim the selection to its object"><sac-icon name="crop"></sac-icon></button>
+                    <button type="button" class="icon-btn tool pa-fliph" title="Flip horizontal (Shift+H)" data-lt="sel.flipH"><sac-icon name="flip-h"></sac-icon></button>
+                    <button type="button" class="icon-btn tool pa-flipv" title="Flip vertical (Shift+V)" data-lt="sel.flipV"><sac-icon name="flip-v"></sac-icon></button>
+                    <button type="button" class="icon-btn tool pa-copyb" title="Copy (Ctrl+C)" data-lt="sel.copy"><sac-icon name="copy"></sac-icon></button>
+                    <button type="button" class="icon-btn tool pa-cutb" title="Cut (Ctrl+X)" data-lt="sel.cut"><sac-icon name="scissors"></sac-icon></button>
+                    <button type="button" class="icon-btn tool pa-pasteb" title="Paste in place (Ctrl+V)" data-lt="sel.paste"><sac-icon name="paste"></sac-icon></button>
+                    <button type="button" class="icon-btn tool pa-trimb" title="Trim the selection to its object" data-lt="sel.trim"><sac-icon name="crop"></sac-icon></button>
                 </div>
             </div>
         </sac-window>
 
-        <sac-window class="pa-win" data-win="palette" title="Palette" right="14px" top="64px"
+        <sac-window class="pa-win" data-win="palette" title="Palette" data-lw="win.palette" right="14px" top="64px"
                     width="232px" height="auto" controls="close" snap="14" no-compact open>
             <div class="pa-winbody">
                 <div class="pa-row">
                     <sac-segmented-control class="pa-palmode" value="all">
-                        <button data-value="all">All</button>
-                        <button data-value="used">Used</button>
+                        <button data-value="all" data-l="pal.all">All</button>
+                        <button data-value="used" data-l="pal.used">Used</button>
                     </sac-segmented-control>
-                    <button type="button" class="icon-btn tool pa-palload" title="Load palette… (.gpl, .hex or an image)"><sac-icon name="folder"></sac-icon></button>
+                    <button type="button" class="icon-btn tool pa-palload" title="Load palette… (.gpl, .hex or an image)" data-lt="pal.load"><sac-icon name="folder"></sac-icon></button>
                 </div>
                 <sac-swatch-grid class="pa-palette" columns="6" selectable></sac-swatch-grid>
             </div>
         </sac-window>
 
-        <sac-window class="pa-win" data-win="preview" title="Preview" right="14px"
+        <sac-window class="pa-win" data-win="preview" title="Preview" data-lw="win.preview" right="14px"
                     width="auto" height="auto" controls="close" no-resize snap="14" no-compact open>
             <div class="pa-winbody">
                 <div class="pa-pvstage"><sac-pixel-canvas class="pa-pv" static zoom="3"></sac-pixel-canvas></div>
                 <div class="pa-row">
                     <button type="button" class="icon-btn pa-pvplay" title="Play"><sac-icon name="play"></sac-icon></button>
-                    <sac-stepper class="pa-fps" value="8" min="1" max="30" unit="fps" label="Playback speed"></sac-stepper>
+                    <sac-stepper class="pa-fps" value="8" min="1" max="30" unit="fps" label="Playback speed" data-la="fps"></sac-stepper>
                 </div>
                 <div class="pa-row pa-pvrow">
                     <sac-segmented-control class="pa-pvzoom" value="3">
@@ -440,23 +578,23 @@
     <sac-filmstrip class="pa-film" actions reorderable pixelated value="0">
         <div slot="controls" class="pa-film-ctrl">
             <button type="button" class="icon-btn pa-play" title="Play"><sac-icon name="play"></sac-icon></button>
-            <button type="button" class="icon-btn pa-onion active" title="Onion skin (O)"><sac-icon name="onion"></sac-icon></button>
+            <button type="button" class="icon-btn pa-onion active" title="Onion skin (O)" data-lt="onion"><sac-icon name="onion"></sac-icon></button>
         </div>
     </sac-filmstrip>
 
     <sac-menu class="pa-ctx">
-        <button data-action="copy"><sac-icon name="copy"></sac-icon> Copy</button>
-        <button data-action="cut"><sac-icon name="scissors"></sac-icon> Cut</button>
-        <button data-action="paste"><sac-icon name="paste"></sac-icon> Paste</button>
+        <button data-action="copy"><sac-icon name="copy"></sac-icon> <span data-l="ctx.copy">Copy</span></button>
+        <button data-action="cut"><sac-icon name="scissors"></sac-icon> <span data-l="ctx.cut">Cut</span></button>
+        <button data-action="paste"><sac-icon name="paste"></sac-icon> <span data-l="ctx.paste">Paste</span></button>
         <hr>
-        <button data-action="flip-h"><sac-icon name="flip-h"></sac-icon> Flip horizontal</button>
-        <button data-action="flip-v"><sac-icon name="flip-v"></sac-icon> Flip vertical</button>
-        <button data-action="trim"><sac-icon name="crop"></sac-icon> Trim selection</button>
-        <button data-action="select-all"><sac-icon name="marquee"></sac-icon> Select whole frame</button>
+        <button data-action="flip-h"><sac-icon name="flip-h"></sac-icon> <span data-l="ctx.flipH">Flip horizontal</span></button>
+        <button data-action="flip-v"><sac-icon name="flip-v"></sac-icon> <span data-l="ctx.flipV">Flip vertical</span></button>
+        <button data-action="trim"><sac-icon name="crop"></sac-icon> <span data-l="ctx.trim">Trim selection</span></button>
+        <button data-action="select-all"><sac-icon name="marquee"></sac-icon> <span data-l="ctx.selectAll">Select whole frame</span></button>
         <hr>
-        <button data-action="dup-frame"><sac-icon name="copy"></sac-icon> Duplicate frame</button>
-        <button data-action="add-frame"><sac-icon name="plus"></sac-icon> Add frame</button>
-        <button data-action="delete-frame" data-danger><sac-icon name="trash"></sac-icon> Delete frame</button>
+        <button data-action="dup-frame"><sac-icon name="copy"></sac-icon> <span data-l="ctx.dupFrame">Duplicate frame</span></button>
+        <button data-action="add-frame"><sac-icon name="plus"></sac-icon> <span data-l="ctx.addFrame">Add frame</span></button>
+        <button data-action="delete-frame" data-danger><sac-icon name="trash"></sac-icon> <span data-l="ctx.deleteFrame">Delete frame</span></button>
     </sac-menu>
 </div>`;
         }
@@ -485,8 +623,12 @@
             this._visible = false;
             this._offs = [];
 
-            this.$tools.tools = TOOLS;
             this._restoring = true;   // no settings writes until the saved ones are read
+            this._applyLang();
+            // The language belongs to the page (the host, standalone the kit):
+            // relabel whenever it changes. Older hosts have no sac.lang.
+            const lang = context.lang || sac.lang;
+            this._offLang = lang && lang.onChange ? lang.onChange(() => this._applyLang()) : null;   // no settings writes until the saved ones are read
             this._wire();
             this._load(blankDoc(32, 32, 1), null, null);
             this._setTool("pencil");
@@ -515,6 +657,7 @@
             this._setVisible(false);
             this._io?.disconnect();
             document.removeEventListener("visibilitychange", this._onHide);
+            this._offLang?.();
             this._flush();
         }
 
@@ -530,6 +673,8 @@
                 this.$tools.removeAttribute("hotkeys");
                 this._offs.forEach((off) => off());
                 this._offs = [];
+                this._offExtras?.();
+                this._offExtras = null;
                 this._stopPlay();
                 this._pvStop(true);
             }
@@ -537,45 +682,38 @@
 
         _bindKeys() {
             // skipInInput: combos that also edit text stay the text field's own while typing.
-            const k = (combo, fn, description, group, skipInInput) =>
-                this._offs.push(sac.hotkeys.register(combo, fn, { description, group, skipInInput }));
-            k("mod+z", () => this._undo(), "Undo", "Edit", true);
-            k("mod+shift+z", () => this._redo(), "Redo", "Edit", true);
-            k("mod+y", () => this._redo(), "Redo", "Edit", true);
-            k("mod+s", () => this._save(false), "Save", "File");
-            k("mod+shift+s", () => this._save(true), "Save as…", "File");
-            k("mod+o", () => this._open(), "Open…", "File");
-            k("mod+a", () => this._selectAllFrame(), "Select the whole frame", "Selection", true);
-            k("shift+h", () => this._flip("h"), "Flip horizontal", "Selection");
-            k("shift+v", () => this._flip("v"), "Flip vertical", "Selection");
-            k("escape", () => this._escape(), "Drop the selection", "Selection");
-            k("delete", () => this._deleteSel(), "Clear the selection", "Selection");
-            k("backspace", () => this._deleteSel(), "", "Selection");
-            k("plus", () => this.$canvas.zoomIn(), "Zoom in", "View");
-            k("=", () => this.$canvas.zoomIn(), "", "View");
-            k("-", () => this.$canvas.zoomOut(), "Zoom out", "View");
-            k("[", () => this._setBrush(this.brush - 1), "Smaller brush", "Tools");
-            k("]", () => this._setBrush(this.brush + 1), "Bigger brush", "Tools");
+            // Description and group as functions: the shortcut sheet asks again
+            // every time it opens, so it follows the page's language.
+            const k = (combo, fn, dkey, gkey, skipInInput) =>
+                this._offs.push(sac.hotkeys.register(combo, fn, { description: dkey ? () => L(dkey) : "", group: () => L(gkey), skipInInput }));
+            k("mod+z", () => this._undo(), "k.undo", "g.edit", true);
+            k("mod+shift+z", () => this._redo(), "k.redo", "g.edit", true);
+            k("mod+y", () => this._redo(), "k.redo", "g.edit", true);
+            k("mod+s", () => this._save(false), "k.save", "g.file");
+            k("mod+shift+s", () => this._save(true), "k.saveAs", "g.file");
+            k("mod+o", () => this._open(), "k.open", "g.file");
+            k("mod+a", () => this._selectAllFrame(), "k.selectAll", "g.selection", true);
+            k("shift+h", () => this._flip("h"), "k.flipH", "g.selection");
+            k("shift+v", () => this._flip("v"), "k.flipV", "g.selection");
+            k("escape", () => this._escape(), "k.drop", "g.selection");
+            k("delete", () => this._deleteSel(), "k.clear", "g.selection");
+            k("backspace", () => this._deleteSel(), "", "g.selection");
+            k("plus", () => this.$canvas.zoomIn(), "k.zoomIn", "g.view");
+            k("=", () => this.$canvas.zoomIn(), "", "g.view");
+            k("-", () => this.$canvas.zoomOut(), "k.zoomOut", "g.view");
+            k("[", () => this._setBrush(this.brush - 1), "k.brushDown", "g.tools");
+            k("]", () => this._setBrush(this.brush + 1), "k.brushUp", "g.tools");
             // Arrows: nudge a selection, else step through the frames.
-            k("up", () => this._nudge(0, -1), "Nudge the selection", "Selection");
-            k("down", () => this._nudge(0, 1), "", "Selection");
-            k("left", () => this.sel ? this._nudge(-1, 0) : this._setFrame(this.frame - 1), "Previous frame", "Frames");
-            k("right", () => this.sel ? this._nudge(1, 0) : this._setFrame(this.frame + 1), "Next frame", "Frames");
+            k("up", () => this._nudge(0, -1), "k.nudge", "g.selection");
+            k("down", () => this._nudge(0, 1), "", "g.selection");
+            k("left", () => this.sel ? this._nudge(-1, 0) : this._setFrame(this.frame - 1), "k.prevFrame", "g.frames");
+            k("right", () => this.sel ? this._nudge(1, 0) : this._setFrame(this.frame + 1), "k.nextFrame", "g.frames");
             for (let n = 1; n <= 10; n++) {
-                k(String(n % 10), () => { if (n - 1 < this.doc.frames.length) this._setFrame(n - 1); }, n === 1 ? "Frame 1 … 10" : "", "Frames");
+                k(String(n % 10), () => { if (n - 1 < this.doc.frames.length) this._setFrame(n - 1); }, n === 1 ? "k.frameN" : "", "g.frames");
             }
-            k("o", () => this._toggleOnion(), "Onion skin", "Frames");
+            k("o", () => this._toggleOnion(), "k.onion", "g.frames");
             this._offs.push(sac.shortcuts.bind());
-            this._offs.push(sac.shortcuts.add([
-                { group: "View", keys: "Space + drag", description: "Pan" },
-                { group: "View", keys: ["Middle-drag"], description: "Pan" },
-                { group: "View", keys: ["Wheel"], description: "Zoom at the cursor" },
-                { group: "Tools", keys: ["Alt", "click"], description: "Pick a color with any tool" },
-                { group: "Tools", keys: ["Shift", "click"], description: "Pencil / eraser: line from the last point" },
-                { group: "Selection", keys: ["Ctrl", "C"], description: "Copy" },
-                { group: "Selection", keys: ["Ctrl", "X"], description: "Cut" },
-                { group: "Selection", keys: ["Ctrl", "V"], description: "Paste in place, also images from other apps" },
-            ]));
+            this._addShortcutExtras();
             // Clipboard through the native events, not hotkeys: those would
             // swallow Ctrl+C in every text field of the page.
             const clip = (type, fn) => {
@@ -586,6 +724,22 @@
             clip("copy", (e) => { if (this._copy()) this._markClipboard(e); });
             clip("cut", (e) => { if (this._cut()) this._markClipboard(e); });
             clip("paste", (e) => this._pasteEvent(e));
+        }
+
+        /** Gestures the hotkey registry cannot express, in the page's language. */
+        _addShortcutExtras() {
+            this._offExtras?.();
+            this._offExtras = sac.shortcuts.add([
+                { group: L("g.view"), keys: L("x.panDrag"), description: L("x.pan") },
+                { group: L("g.view"), keys: [L("x.middleDrag")], description: L("x.pan") },
+                { group: L("g.view"), keys: [L("x.wheel")], description: L("x.zoomCursor") },
+                { group: L("g.tools"), keys: ["Alt", L("x.click")], description: L("x.pick") },
+                { group: L("g.tools"), keys: [L("x.shift"), L("x.click")], description: L("x.line") },
+                // Key caps as the kit shows its own (Strg / Ctrl / ⌘, per platform and language).
+                { group: L("g.selection"), keys: sac.hotkeys.format("mod+c"), description: L("x.copy") },
+                { group: L("g.selection"), keys: sac.hotkeys.format("mod+x"), description: L("x.cut") },
+                { group: L("g.selection"), keys: sac.hotkeys.format("mod+v"), description: L("x.paste") },
+            ]);
         }
 
         /* ------------------------------------------------------ wiring ---- */
@@ -630,7 +784,7 @@
             on(".pa-pvzoom", "sac:change", (e) => this._setPvZoom(Number(e.detail.value)));
 
             on(".pa-play", "click", () => this._togglePlay());
-            on(".pa-keys", "click", () => sac.shortcuts.show({ title: "Pixel Atelier shortcuts" }));
+            on(".pa-keys", "click", () => sac.shortcuts.show({ title: L("sheet.title") }));
             const FRAME_ACTIONS = { add: () => this._addFrame(), duplicate: () => this._dupFrame(), delete: () => this._deleteFrame() };
             this.$film.addEventListener("sac:change", (e) => this._setFrame(e.detail.index));
             this.$film.addEventListener("sac:action", (e) => FRAME_ACTIONS[e.detail.action]?.());
@@ -660,6 +814,20 @@
                 "add-frame": () => this._addFrame(),
                 "delete-frame": () => this._deleteFrame(),
             })[e.detail.action]?.());
+        }
+
+        /** Every visible string in the page's language (on mount and on a switch). */
+        _applyLang() {
+            for (const e of this.querySelectorAll("[data-l]")) e.textContent = L(e.dataset.l);
+            for (const e of this.querySelectorAll("[data-lt]")) e.title = L(e.dataset.lt);
+            for (const e of this.querySelectorAll("[data-lw]")) e.setAttribute("title", L(e.dataset.lw));
+            for (const e of this.querySelectorAll("[data-la]")) e.setAttribute("label", L(e.dataset.la));
+            for (const e of this.querySelectorAll("[data-lg]")) e.setAttribute("group", L(e.dataset.lg));
+            this.$tools.tools = TOOLS.map((t) => ({ ...t, label: L(t.lkey) }));
+            this.$tools.value = this.tool;
+            if (this.doc) { this._buildPalette(); this._syncMeta(); }
+            if (this._playIconsReady) { this._playIcon(".pa-play", !!this._playing); this._pvIcon(); }
+            if (this._visible) this._addShortcutExtras();
         }
 
         /* ---------------------------------------------- floating windows -- */
@@ -929,7 +1097,7 @@
                 const s = this.sel;
                 this.clip = { data: raster.copy(this.doc, this._buf(), s), w: s.w, h: s.h, x: s.x, y: s.y };
             } else return false;
-            this._toast("Copied");
+            this._toast(L("t.copied"));
             return true;
         }
         _cut() {
@@ -951,7 +1119,7 @@
             this._setSel({ x, y, w: clip.w, h: clip.h });
             this._render();
             this._touch();
-            this._toast("Pasted — drag it or use the arrows to place it");
+            this._toast(L("t.pasted"));
         }
         /** Our own copy leaves a marker, so a later copy in another app wins on paste. */
         _markClipboard(e) {
@@ -973,7 +1141,7 @@
                 const res = await decodeFile(image);
                 const w = Math.min(res.width, this.doc.w), h = Math.min(res.height, this.doc.h);
                 this._paste({ data: new Uint8ClampedArray(res.g.getImageData(0, 0, w, h).data), w, h, x: 0, y: 0 });
-            } catch { this._toast("The image could not be read"); }
+            } catch { this._toast(L("t.unreadable")); }
         }
 
         /* ---------------------------------------------------- frames ------ */
@@ -1000,19 +1168,19 @@
         _addFrame() {
             if (this.doc.frames.length >= MAX_FRAMES) return;
             const l = [...this.doc.frames.keys(), null];
-            this._applyFrames(l, l.length - 1, "Frame added");
+            this._applyFrames(l, l.length - 1, L("t.frameAdded"));
         }
         _dupFrame() {
             if (this.doc.frames.length >= MAX_FRAMES) return;
             const l = [...this.doc.frames.keys()];
             l.splice(this.frame + 1, 0, this.frame);
-            this._applyFrames(l, this.frame + 1, "Frame duplicated");
+            this._applyFrames(l, this.frame + 1, L("t.frameDuplicated"));
         }
         _deleteFrame() {
             if (this.doc.frames.length <= 1) return;
             const l = [...this.doc.frames.keys()];
             l.splice(this.frame, 1);
-            this._applyFrames(l, this.frame, "Frame deleted");
+            this._applyFrames(l, this.frame, L("t.frameDeleted"));
         }
         _toggleOnion() {
             this.onion = !this.onion;
@@ -1043,7 +1211,8 @@
         _playIcon(sel, on) {
             const b = this.querySelector(sel);
             b.querySelector("sac-icon").setAttribute("name", on ? "pause" : "play");
-            b.title = on ? "Pause" : "Play";
+            b.title = on ? L("pause") : L("play");
+            this._playIconsReady = true;
         }
         /** Move a frame (the filmstrip has already moved its thumbnail). */
         _moveFrame(from, to) {
@@ -1128,7 +1297,7 @@
 
         _buildPalette() {
             const colors = this.palMode === "used" ? this.doc.usedColors() : this.doc.palette;
-            this.$palette.colors = [{ value: "transparent", label: "Transparent (eraser color)" },
+            this.$palette.colors = [{ value: "transparent", label: L("pal.transparent") },
                 ...colors.map((value) => ({ value }))];
             this.querySelector(".pa-palmode").value = this.palMode;
             this._markSwatch();
@@ -1142,8 +1311,8 @@
          */
         async _loadPalette() {
             const files = this._ctx.files;
-            if (!files) { this._toast("This host offers no files."); return; }
-            const picked = await files.open({ accept: ".gpl,.hex,.txt,image/*", title: "Load palette" });
+            if (!files) { this._toast(L("t.noFiles")); return; }
+            const picked = await files.open({ accept: ".gpl,.hex,.txt,image/*", title: L("d.loadPalette") });
             if (!picked) return;
             let colors = [];
             try {
@@ -1164,13 +1333,13 @@
                     colors = [...new Set(colors)].slice(0, 256);
                 }
             } catch { colors = []; }
-            if (!colors.length) { this._toast(`No colors found in ${picked.name}`); return; }
+            if (!colors.length) { this._toast(L("t.noColors", { name: picked.name })); return; }
             this.doc.palette = colors;
             this.palMode = "all";
             this._buildPalette();
             this._setDirty(true);
             this._touch();
-            this._toast(`Palette loaded: ${colors.length} colors`);
+            this._toast(L("t.paletteLoaded", { n: colors.length }));
         }
 
         /* ---------------------------------------------------- refresh ----- */
@@ -1209,7 +1378,7 @@
         /** The canvas overlay: the file's name (once it has one), size, frames, zoom; • = unsaved. */
         _syncMeta() {
             const d = this.doc, n = d.frames.length;
-            const parts = [this.file && this.file.name, `${d.w}×${d.h}`, n > 1 && `${n} frames`, `${this.$canvas.zoom}×`];
+            const parts = [this.file && this.file.name, `${d.w}×${d.h}`, n > 1 && `${n} ${L("hud.frames")}`, `${this.$canvas.zoom}×`];
             this.querySelector(".pa-meta").textContent = parts.filter(Boolean).join(" · ") + (this._dirty ? " •" : "");
         }
         _toast(msg) { if (window.sac && sac.toast) sac.toast(msg); }
@@ -1288,7 +1457,7 @@
                     const res = await decodeFile(blob);
                     if (res.meta && this.doc === startDoc && !this.undo.length) {
                         this._load(docFromStrip(res, res.meta.frames), session.name ? { name: session.name, handle: null } : null, null);
-                        if (session.dirty) { this._setDirty(true); this._toast("Unsaved work restored"); }
+                        if (session.dirty) { this._setDirty(true); this._toast(L("t.restored")); }
                     }
                 }
             } catch (err) {
@@ -1304,11 +1473,11 @@
         async _discardOk() {
             if (!this._dirty) return true;
             const a = await sac.dialog.confirm({
-                title: "Discard unsaved changes?",
-                message: this.file ? this.file.name : "This sprite has not been saved yet.",
+                title: L("d.discardTitle"),
+                message: this.file ? this.file.name : L("d.notSaved"),
                 buttons: [
-                    { action: "cancel", label: "Cancel", kind: "default" },
-                    { action: "discard", label: "Discard", kind: "destructive" },
+                    { action: "cancel", label: L("d.cancel"), kind: "default" },
+                    { action: "discard", label: L("d.discard"), kind: "destructive" },
                 ],
             });
             return a === "discard";
@@ -1317,20 +1486,20 @@
         async _new() {
             if (!(await this._discardOk())) return;
             let dropped = null;
-            const { action, dlg } = await dialog("New sprite", `
+            const { action, dlg } = await dialog(L("d.newTitle"), `
                 <div class="pa-form">
-                    <div class="pa-row"><label>Width</label>
-                        <sac-stepper class="pa-n-w" value="${this.doc.w}" min="1" max="${MAX_SIDE}" unit="px" label="Width"></sac-stepper></div>
-                    <div class="pa-row"><label>Height</label>
-                        <sac-stepper class="pa-n-h" value="${this.doc.h}" min="1" max="${MAX_SIDE}" unit="px" label="Height"></sac-stepper></div>
-                    <div class="pa-row"><label>Frames</label>
-                        <sac-stepper class="pa-n-f" value="1" min="1" max="${MAX_FRAMES}" label="Frames"></sac-stepper></div>
-                    <sac-drop-zone accept="image/*" label="…or drop an image here to open it"
-                                   touch-label="…or open an image"></sac-drop-zone>
+                    <div class="pa-row"><label>${esc(L("d.width"))}</label>
+                        <sac-stepper class="pa-n-w" value="${this.doc.w}" min="1" max="${MAX_SIDE}" unit="px" label="${esc(L("d.width"))}"></sac-stepper></div>
+                    <div class="pa-row"><label>${esc(L("d.height"))}</label>
+                        <sac-stepper class="pa-n-h" value="${this.doc.h}" min="1" max="${MAX_SIDE}" unit="px" label="${esc(L("d.height"))}"></sac-stepper></div>
+                    <div class="pa-row"><label>${esc(L("d.frames"))}</label>
+                        <sac-stepper class="pa-n-f" value="1" min="1" max="${MAX_FRAMES}" label="${esc(L("d.frames"))}"></sac-stepper></div>
+                    <sac-drop-zone accept="image/*" label="${esc(L("d.drop"))}"
+                                   touch-label="${esc(L("d.dropTouch"))}"></sac-drop-zone>
                 </div>`,
             [
-                { action: "cancel", label: "Cancel", kind: "default" },
-                { action: "create", label: "Create", kind: "primary" },
+                { action: "cancel", label: L("d.cancel"), kind: "default" },
+                { action: "create", label: L("d.create"), kind: "primary" },
             ], (d) => d.addEventListener("sac:files", (e) => { dropped = e.detail.files[0]; d.close("drop"); }));
             if (action === "drop" && dropped) { this._openFile(dropped, { name: dropped.name, handle: null }); return; }
             if (action !== "create") return;
@@ -1341,20 +1510,20 @@
 
         async _open() {
             const files = this._ctx.files;
-            if (!files) { this._toast("This host offers no files."); return; }
+            if (!files) { this._toast(L("t.noFiles")); return; }
             if (!(await this._discardOk())) return;
-            const picked = await files.open({ accept: ".png,image/png,image/*", title: "Open a sprite" });
+            const picked = await files.open({ accept: ".png,image/png,image/*", title: L("d.openTitle") });
             if (picked) this._openFile(picked.file, picked);
         }
 
         /** Open any image: ours comes back whole, anything else is split into frames on request. */
         async _openFile(file, ref) {
             let res;
-            try { res = await decodeFile(file); } catch { this._toast("The image could not be read"); return; }
+            try { res = await decodeFile(file); } catch { this._toast(L("t.unreadable")); return; }
             const n = res.meta ? res.meta.frames : await this._askFrames(res.width, res.height, ref.name);
             if (!n) return;
             if (res.width / n > MAX_SIDE || res.height > MAX_SIDE) {
-                this._toast(`Frames can be at most ${MAX_SIDE}×${MAX_SIDE} px`);
+                this._toast(L("t.tooBig", { n: MAX_SIDE }));
                 return;
             }
             // Save writes PNG: a handle to anything else would overwrite it with one.
@@ -1374,12 +1543,12 @@
             const options = counts.map((n) => `<option value="${n}"${n === guess ? " selected" : ""}>${n} × ${width / n}×${height} px</option>`).join("");
             const { action, dlg } = await dialog(name, `
                 <div class="pa-form">
-                    <p class="pa-note">${width}×${height} px. Frames sit side by side in a strip — how many are there?</p>
-                    <div class="pa-row"><label>Frames</label><span class="select"><select class="pa-o-n">${options}</select></span></div>
+                    <p class="pa-note">${esc(L("d.stripQuestion", { w: width, h: height }))}</p>
+                    <div class="pa-row"><label>${esc(L("d.frames"))}</label><span class="select"><select class="pa-o-n">${options}</select></span></div>
                 </div>`,
             [
-                { action: "cancel", label: "Cancel", kind: "default" },
-                { action: "open", label: "Open", kind: "primary" },
+                { action: "cancel", label: L("d.cancel"), kind: "default" },
+                { action: "open", label: L("d.open"), kind: "primary" },
             ]);
             return action === "open" ? Number(dlg.querySelector(".pa-o-n").value) : null;
         }
@@ -1387,7 +1556,7 @@
         /** Save = back through the handle; Save as (or no handle yet) asks. */
         async _save(asNew) {
             const files = this._ctx.files;
-            if (!files) { this._toast("This host offers no files."); return; }
+            if (!files) { this._toast(L("t.noFiles")); return; }
             this._commitFloat();
             const blob = await encodeDoc(this.doc, this._bufOf());
             const saved = await files.save(blob, {
@@ -1403,18 +1572,18 @@
             this._setDirty(false);
             this._syncMeta();
             this._autosave();
-            this._toast(files.kind === "browser" && !saved.handle ? `Downloaded ${saved.name}` : `Saved ${saved.name}`);
+            this._toast(files.kind === "browser" && !saved.handle ? L("t.downloaded", { name: saved.name }) : L("t.saved", { name: saved.name }));
         }
 
         /** Back to the last saved (or opened) state. */
         async _revert() {
-            if (!this.savedBlob) { this._toast("Nothing saved yet"); return; }
+            if (!this.savedBlob) { this._toast(L("t.nothingSaved")); return; }
             const a = await sac.dialog.confirm({
-                title: "Revert to saved?",
-                message: "Every change since the last save is lost.",
+                title: L("d.revertTitle"),
+                message: L("d.revertMsg"),
                 buttons: [
-                    { action: "cancel", label: "Cancel", kind: "default" },
-                    { action: "revert", label: "Revert", kind: "destructive" },
+                    { action: "cancel", label: L("d.cancel"), kind: "default" },
+                    { action: "revert", label: L("d.revert"), kind: "destructive" },
                 ],
             });
             if (a !== "revert") return;
@@ -1422,7 +1591,7 @@
             const n = res.meta ? res.meta.frames : (this._savedFrames || 1);
             this._load(docFromStrip(res, n), this.file, this.savedBlob);
             this._touch();
-            this._toast("Reverted to the saved state");
+            this._toast(L("t.reverted"));
         }
     }
 
