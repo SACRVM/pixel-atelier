@@ -30,6 +30,10 @@
  *             into sac.apps on connect — they are the user-added apps.
  *   edit    — presence = edit mode. Toggled by the Edit button; settable by
  *             hand. Ignored (removed) when there is no `storage`.
+ *   drag    — drag reorder: absent = in edit mode only (the default),
+ *             "always" = also outside edit mode, "none" = buttons only.
+ *             Needs `storage` and sac.sortable (kit/js/lib/sortable.js);
+ *             without the helper the move buttons are the only path.
  *
  * Methods:
  *   refresh() — re-read sac.apps.list() and re-sync the grid in place. The
@@ -37,11 +41,46 @@
  *               runtime emits (and on DOMContentLoaded), so registering apps
  *               after it connected just works; refresh() remains for hosts
  *               that mutate state outside sac.apps.
+ *   setLinks(list) — plain link tiles beside the sac.apps entries, for
+ *               anything that already has an address (a sac.router route,
+ *               another page): [{ id, name, icon, description, href, badge,
+ *               tile, accent, menu }]. No sac.apps registration involved. A
+ *               link tile is a real <a href> — a "#/notes" href is an in-SPA
+ *               navigation, never a reload. Its key is its `id`, sharing the
+ *               key space (and so the persisted order/hidden layout) with the
+ *               app tiles; an id that collides with an app tile is skipped
+ *               with a warning. Link tiles can be moved and hidden, never
+ *               removed (the host owns them). Unordered link tiles come
+ *               before unordered app tiles. Replaces the previous list;
+ *               `launcher.links` reads it back (assignable too).
+ *   setBadge(key, value) — repaint ONE tile's corner pill: a string or
+ *               number shows it, null or "" clears it, undefined drops the
+ *               override so the manifest's own `badge` shows again. Touches
+ *               nothing else (not sac.apps, not order or hidden state), may
+ *               be called before the tile exists, and survives re-syncs.
+ *   setMenu(key, items) — the tile's corner menu, overriding the entry's own
+ *               `menu` (null = no menu, undefined = back to the entry's).
+ *
+ * Tile keys: an app id, "appId::tileId" for a multi-tile app's tile (see
+ * Tiles), or a link tile's id — the same keys `sac:layout` reports.
+ *
+ * Per-tile menu: `menu` on a manifest, a manifest `tiles` entry, a link, or
+ * via setMenu() — [{ id, label, labelKey, icon, danger, disabled, onClick }]
+ * with "-" for a separator. It renders a <sac-menu> behind a "…" button in
+ * the tile's bottom-right corner, in AND out of edit mode (the edit
+ * controls own the top-right corner). On narrow phones (≤480px, where tiles
+ * are rows) it sits centred on the right edge and steps aside for the edit
+ * controls while editing. `labelKey` relabels the item on a
+ * language switch (t(labelKey, label)). onClick(info) gets
+ * { key, appId, action, launcher }; `appId` is null for a link tile.
  *
  * Events:
  *   sac:layout — detail { order, hidden, customCount } after every
- *                         user change (move / hide / show / add / remove).
- *                         Bubbles + composed.
+ *                         user change (move / drag / hide / show / add /
+ *                         remove). Bubbles + composed.
+ *   sac:tile-action — detail { key, appId, action } when a tile-menu item
+ *                         is chosen (action = the item's id, else its
+ *                         index). Bubbles + composed; fires after onClick.
  *
  * Tiles:
  *   kind:"page" apps render as real <a> links; window and view apps render
@@ -68,12 +107,19 @@
  *   script URL, width, height. The form stays lean by design — user-added
  *   apps are always medium tiles with no badge.
  *
+ * Drag reorder (sac.sortable, axis "grid"): mouse/pen lift after 4px, touch
+ * after a 250ms long-press (a swipe keeps scrolling the page), Escape puts
+ * the tile back. A dashed outline marks the slot the tile will land in. A
+ * drop persists exactly like the move buttons (the effective order is
+ * stored and sac:layout fires); the buttons stay the keyboard path.
+ *
  * Compact/touch: the grid goes single-column below ~584px of its own width
  * (the .grid pattern's 280px minimum), wide/large tiles included — a span-2
  * cell in a one-column grid would otherwise add a phantom column and scroll
  * the page sideways. Under (pointer: coarse) the edit controls grow from 28px
  * to a 36px look with a 44px hit halo (gap 8px, so neighbouring halos just
- * touch and never overlap). Under (hover: none) the Add tile's hover tint is
+ * touch and never overlap); the tile-menu button does the same. Under
+ * (hover: none) the Add tile's hover tint is
  * off (a tap would leave it stuck). The launcher never positions the windows
  * it opens — sac.apps creates them and sac-window maximizes itself on
  * compact.
@@ -91,13 +137,17 @@
         (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
 
 class SacLauncher extends HTMLElement {
-    static get observedAttributes() { return ["storage", "edit"]; }
+    static get observedAttributes() { return ["storage", "edit", "drag"]; }
 
     constructor() {
         super();
         this._state = { order: [], hidden: [], custom: [] }; // persisted layer
         this._order = [];        // effective full order (known ids only)
         this._tiles = new Map(); // id → cell element
+        this._links = [];        // setLinks() — plain link tiles
+        this._badges = new Map(); // key → badge override (setBadge)
+        this._menus = new Map();  // key → menu override (setMenu)
+        this._sortable = null;
         this._grid = null;
         this._dialog = null;
         this._form = null;
@@ -123,9 +173,28 @@ class SacLauncher extends HTMLElement {
         this._sync();
         this._syncEditUI();
         if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+        if (!this._sortable && window.sac && typeof sac.sortable === "function") {
+            this._sortable = sac.sortable(this._grid, {
+                axis: "grid",
+                items: SacLauncher.DRAG_ITEMS,
+                ignore: "input, textarea, select, [contenteditable], [data-sortable-ignore], " +
+                        ".sac-launcher-controls, sac-menu",
+                disabled: () => !this._dragAllowed(),
+                onReorder: () => this._onDrop(),
+            });
+        }
+        if (!this._dragObserver) {
+            // The live slot of a lifted tile gets the drop outline.
+            this._dragObserver = new MutationObserver(() => this._trackDrag());
+            this._dragObserver.observe(this._grid, {
+                subtree: true, attributes: true, attributeFilter: ["data-sortable-dragging"] });
+        }
     }
 
     disconnectedCallback() {
+        if (this._sortable) { this._sortable.destroy(); this._sortable = null; }
+        if (this._dragObserver) { this._dragObserver.disconnect(); this._dragObserver = null; }
+        this._stopTrack();
         if (this._offLang) { this._offLang(); this._offLang = null; }
         document.removeEventListener("sac:apps-changed", this._onReady);
         document.removeEventListener("DOMContentLoaded", this._onReady);
@@ -139,7 +208,7 @@ class SacLauncher extends HTMLElement {
             this._loadState();
             this._sync();
             this._syncEditUI();
-        } else if (name === "edit") {
+        } else if (name === "edit" || name === "drag") {
             this._syncEditUI();
         }
     }
@@ -155,12 +224,47 @@ class SacLauncher extends HTMLElement {
         this._empty.textContent = t("launcher.no-apps", "No apps registered.");
         this._editBtn.textContent = this.hasAttribute("edit")
             ? t("launcher.done", "Done") : t("launcher.edit", "Edit");
-        this._tiles.forEach((cell) => this._labelCell(cell));
+        this._tiles.forEach((cell) => { this._labelCell(cell); this._labelMenu(cell); });
         if (this._dialog) this._labelForm();
     }
 
     /** Re-read the registry and re-sync the grid (targeted updates only). */
     refresh() { this._sync(); }
+
+    /** Plain link tiles beside the sac.apps entries (see header). */
+    setLinks(list) {
+        const out = [];
+        const seen = new Set();
+        (Array.isArray(list) ? list : []).forEach((l) => {
+            if (!l || typeof l !== "object" || typeof l.id !== "string" || !l.id || seen.has(l.id)) {
+                console.warn("[sac-launcher] setLinks(): skipping a link without a unique string id", l);
+                return;
+            }
+            seen.add(l.id);
+            out.push(Object.assign({}, l));
+        });
+        this._links = out;
+        if (this._grid) this._sync();
+    }
+
+    get links() { return this._links.map(l => Object.assign({}, l)); }
+    set links(list) { this.setLinks(list); }
+
+    /** Repaint one tile's badge — nothing else (see header). */
+    setBadge(key, value) {
+        if (value === undefined) this._badges.delete(key);
+        else this._badges.set(key, value);
+        const cell = this._tiles.get(key);
+        if (cell) this._paintBadge(cell);
+    }
+
+    /** Replace one tile's corner menu (see header). */
+    setMenu(key, items) {
+        if (items === undefined) this._menus.delete(key);
+        else this._menus.set(key, items);
+        const cell = this._tiles.get(key);
+        if (cell) this._paintMenu(cell);
+    }
 
     _onReady() { this.refresh(); }
 
@@ -190,6 +294,14 @@ class SacLauncher extends HTMLElement {
         this._addBtn.addEventListener("click", () => this._openAddDialog());
         this._addCell.appendChild(this._addBtn);
         this._grid.appendChild(this._addCell);
+
+        // Drop indicator: out of the grid flow (absolute), last child — the
+        // in-place reorder in _sync() never walks past the Add cell.
+        this._dropMark = document.createElement("div");
+        this._dropMark.className = "sac-launcher-drop";
+        this._dropMark.setAttribute("aria-hidden", "true");
+        this._dropMark.hidden = true;
+        this._grid.appendChild(this._dropMark);
 
         this._empty = document.createElement("p");
         this._empty.className = "sac-launcher-empty";
@@ -256,7 +368,7 @@ class SacLauncher extends HTMLElement {
         // keys, not app ids: a multi-tile app stores composite "appId::tileId"
         // keys, and matching those against ids alone discards every multi-tile
         // customization on save.
-        const known = new Set(this._entries(this._apps()).map(e => e.key));
+        const known = new Set(this._allEntries().map(e => e.key));
         this._state.order = this._order.filter(id => known.has(id));
         this._state.hidden = this._state.hidden.filter(id => known.has(id));
         try {
@@ -277,7 +389,8 @@ class SacLauncher extends HTMLElement {
 
     _apps() {
         if (!window.sac || !sac.apps) {
-            if (!this._warned) {
+            // A links-only launcher is legitimate without the app runtime.
+            if (!this._warned && !this._links.length) {
                 this._warned = true;
                 console.warn("[sac-launcher] sac.apps is not loaded — load kit/js/lib/apps.js before the components.");
             }
@@ -302,7 +415,8 @@ class SacLauncher extends HTMLElement {
                 out.push({ key: m.id, appId: m.id, kind,
                     name: m.name, icon: m.icon, description: m.description,
                     badge: m.badge, tile: m.tile, accent: m.accent,
-                    route: undefined, params: undefined, href: m.href });
+                    route: undefined, params: undefined, href: m.href,
+                    menu: m.menu });
                 return;
             }
             list.forEach((tl, i) => {
@@ -317,14 +431,39 @@ class SacLauncher extends HTMLElement {
                     accent: tl.accent || m.accent,
                     route: tl.route, params: tl.params,
                     href: tl.href || m.href,
+                    menu: tl.menu !== undefined ? tl.menu : m.menu,
                 });
             });
         });
-        return out;
+        // Link tiles (setLinks) — before the app tiles, so unordered ones
+        // come first; an app tile wins a key collision.
+        const taken = new Set(out.map(e => e.key));
+        const links = [];
+        this._links.forEach((l) => {
+            if (taken.has(l.id)) {
+                if (!this._collided) this._collided = new Set();
+                if (!this._collided.has(l.id)) {
+                    this._collided.add(l.id);
+                    console.warn(`[sac-launcher] link "${l.id}" collides with an app tile key — skipped.`);
+                }
+                return;
+            }
+            links.push({ key: l.id, appId: null, link: true, kind: "page",
+                name: l.name, icon: l.icon, description: l.description,
+                badge: l.badge, tile: l.tile, accent: l.accent,
+                route: undefined, params: undefined, href: l.href,
+                menu: l.menu });
+        });
+        return links.concat(out);
     }
 
+    /** Every tile entry: link tiles + the registry's app tiles. */
+    _allEntries() { return this._entries(this._apps()); }
+
     _sync() {
-        const entries = this._entries(this._apps());
+        // A tile in flight owns the DOM order until it lands; catch up then.
+        if (this._dragging) { this._syncPending = true; return; }
+        const entries = this._allEntries();
         const byKey = new Map(entries.map(e => [e.key, e]));
 
         // Effective order: persisted order (known keys only, stale keys
@@ -472,9 +611,8 @@ class SacLauncher extends HTMLElement {
         if (entry.accent) cell._tile.style.setProperty("--accent", entry.accent);
         else cell._tile.style.removeProperty("--accent");
 
-        const badge = entry.badge == null ? "" : String(entry.badge).trim();
-        cell._badge.textContent = badge;
-        cell._badge.hidden = !badge;
+        this._paintBadge(cell);
+        this._paintMenu(cell);
 
         // Manifest-declared footprint; unknown values fall back to medium.
         cell.classList.toggle("size-wide", entry.tile === "wide");
@@ -490,6 +628,105 @@ class SacLauncher extends HTMLElement {
         // straight to the controls.
         if (this.hasAttribute("edit")) cell._tile.setAttribute("tabindex", "-1");
         else cell._tile.removeAttribute("tabindex");
+    }
+
+    /** The corner pill: a setBadge() override wins over the entry's badge. */
+    _paintBadge(cell) {
+        const key = cell._entry.key;
+        const raw = this._badges.has(key) ? this._badges.get(key) : cell._entry.badge;
+        const badge = raw == null ? "" : String(raw).trim();
+        cell._badge.textContent = badge;
+        cell._badge.hidden = !badge;
+    }
+
+    /**
+     * The corner menu: a setMenu() override wins over the entry's `menu`.
+     * Rebuilt only when the item list itself changes, so a re-sync never
+     * closes an open menu under the user's finger.
+     */
+    _paintMenu(cell) {
+        const key = cell._entry.key;
+        const src = this._menus.has(key) ? this._menus.get(key) : cell._entry.menu;
+        const items = Array.isArray(src) ? src.filter(it => it === "-" || (it && typeof it === "object")) : [];
+        const has = items.some(it => it !== "-");
+        if (cell._menuSrc === src && !!cell._menu === has) return;
+        cell._menuSrc = src;
+        cell.classList.toggle("has-menu", has);
+        if (!has) {
+            if (cell._menu) { cell._menu.remove(); cell._menu = null; }
+            return;
+        }
+        if (!cell._menu) {
+            const menu = document.createElement("sac-menu");
+            menu.className = "sac-launcher-menu";
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.slot = "trigger";
+            btn.className = "sac-launcher-ctrl sac-launcher-menu-btn";
+            const ic = document.createElement("sac-icon");
+            ic.setAttribute("name", "more");
+            btn.appendChild(ic);
+            menu.appendChild(btn);
+            menu.addEventListener("sac:select", (e) => {
+                e.stopPropagation();
+                this._onMenuSelect(cell, e.detail && e.detail.action);
+            });
+            cell._menu = menu;
+            cell._menuBtn = btn;
+            cell.appendChild(menu);
+        }
+        // Items: replace everything but the trigger.
+        Array.from(cell._menu.children).forEach((n) => { if (n !== cell._menuBtn) n.remove(); });
+        cell._menuItems = [];
+        items.forEach((it, i) => {
+            if (it === "-") { cell._menu.appendChild(document.createElement("hr")); return; }
+            const b = document.createElement("button");
+            b.type = "button";
+            b.dataset.action = String(i);
+            if (it.danger) b.setAttribute("data-danger", "");
+            if (it.disabled) b.disabled = true;
+            if (it.icon) {
+                const ic = document.createElement("sac-icon");
+                ic.setAttribute("name", it.icon);
+                b.appendChild(ic);
+            }
+            const lab = document.createElement("span");
+            b.appendChild(lab);
+            b._item = it;
+            b._label = lab;
+            cell._menuItems[i] = it;
+            cell._menu.appendChild(b);
+        });
+        this._labelMenu(cell);
+    }
+
+    /** The menu trigger's label and every item's text (host strings via
+     *  t(labelKey, label), so a language switch relabels them too). */
+    _labelMenu(cell) {
+        if (!cell._menu) return;
+        const name = cell._entry.name || cell._entry.appId || cell._entry.key;
+        cell._menuBtn.setAttribute("aria-label",
+            t("launcher.tile-menu", "Actions for {name}").replace("{name}", name));
+        cell._menu.querySelectorAll(":scope > button[data-action]").forEach((b) => {
+            const it = b._item;
+            b._label.textContent = it.labelKey ? t(it.labelKey, it.label || "") : String(it.label || "");
+        });
+    }
+
+    _onMenuSelect(cell, action) {
+        const it = cell._menuItems && cell._menuItems[Number(action)];
+        if (!it) return;
+        const e = cell._entry;
+        const id = it.id != null ? it.id : Number(action);
+        const info = { key: e.key, appId: e.appId, action: id, launcher: this };
+        if (typeof it.onClick === "function") {
+            try { it.onClick(info); }
+            catch (err) { console.error("[sac-launcher] tile menu onClick failed:", err); }
+        }
+        this.dispatchEvent(new CustomEvent("sac:tile-action", {
+            bubbles: true, composed: true,
+            detail: { key: e.key, appId: e.appId, action: id },
+        }));
     }
 
     /** The edit controls' labels — from the cell's current entry and state. */
@@ -521,6 +758,72 @@ class SacLauncher extends HTMLElement {
             if (editing) cell._tile.setAttribute("tabindex", "-1");
             else cell._tile.removeAttribute("tabindex");
         });
+        this._grid.classList.toggle("sac-launcher-can-drag", this._dragAllowed());
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Drag reorder (sac.sortable does the pointer work)                   */
+    /* ------------------------------------------------------------------ */
+
+    _dragAllowed() {
+        const mode = this.getAttribute("drag");
+        if (!this._canEdit() || mode === "none") return false;
+        if (!(window.sac && typeof sac.sortable === "function")) return false;
+        return mode === "always" || this.hasAttribute("edit");
+    }
+
+    /** Lift / land observed: show the slot outline while a tile is up. */
+    _trackDrag() {
+        const cell = this._grid.querySelector(":scope > [data-sortable-dragging]");
+        if (!cell) { this._stopTrack(); return; }
+        if (this._dragging === cell) return;
+        this._dragging = cell;
+        this._dropMark.hidden = false;
+        this._dropMark.classList.remove("placed");   // first frame: no slide-in
+        const step = () => {
+            if (this._dragging !== cell) return;
+            // offset* ignore the transform sortable puts on the lifted cell:
+            // they are its slot — exactly where it lands on release.
+            const s = this._dropMark.style;
+            s.left = `${cell.offsetLeft}px`;
+            s.top = `${cell.offsetTop}px`;
+            s.width = `${cell.offsetWidth}px`;
+            s.height = `${cell.offsetHeight}px`;
+            if (!this._dropMark.classList.contains("placed")) {
+                requestAnimationFrame(() => this._dropMark.classList.add("placed"));
+            }
+            this._trackRaf = requestAnimationFrame(step);
+        };
+        step();
+    }
+
+    _stopTrack() {
+        const was = this._dragging;
+        this._dragging = null;
+        if (this._trackRaf) { cancelAnimationFrame(this._trackRaf); this._trackRaf = 0; }
+        if (this._dropMark) { this._dropMark.hidden = true; this._dropMark.classList.remove("placed"); }
+        if (was && this._syncPending) {
+            this._syncPending = false;
+            // After sortable's own clean-up (and onReorder) in this task.
+            queueMicrotask(() => this._sync());
+        }
+    }
+
+    /**
+     * A drop moved a cell in the DOM. Read the new order straight from the
+     * grid (hidden cells keep their places) and persist it exactly like the
+     * move buttons do.
+     */
+    _onDrop() {
+        this._dragging = null;          // landed — _sync() may touch the DOM again
+        this._syncPending = false;      // _afterChange() re-syncs anyway
+        const order = Array.from(this._grid.children)
+            .filter(c => c.classList.contains("sac-launcher-cell") && c !== this._addCell)
+            .map(c => c.dataset.id);
+        if (order.length !== this._order.length) return;
+        this._order = order;
+        this._state.order = order.slice();
+        this._afterChange();
     }
 
     /* ------------------------------------------------------------------ */
@@ -796,7 +1099,10 @@ class SacLauncher extends HTMLElement {
                must follow the width the grid actually has, not the page's.
                On the grid (a full-width block), never on the host — see the
                responsive notes in ui.css section 15. */
-            sac-launcher > .grid { container: sac-launcher-grid / inline-size; }
+            sac-launcher > .grid {
+                container: sac-launcher-grid / inline-size;
+                position: relative;   /* offset parent of the cells: the drop outline */
+            }
             sac-launcher .sac-launcher-cell > .tile { width: 100%; height: 100%; }
 
             /* Manifest-declared footprint (tile: "wide" | "large"). Spans sit
@@ -830,6 +1136,9 @@ class SacLauncher extends HTMLElement {
             sac-launcher .tile-badge[hidden] { display: none; }
             sac-launcher[edit] .tile-badge { display: none; }
             sac-launcher button.tile { text-align: left; font-size: inherit; }
+            /* Link tiles (<a>) inherit the page's line-height; app tiles
+               (<button>) have "normal" — one metric, so titles line up. */
+            sac-launcher a.tile { line-height: normal; }
             sac-launcher .sac-launcher-tile:focus-visible,
             sac-launcher .sac-launcher-add:focus-visible {
                 outline: 2px solid var(--accent);
@@ -907,6 +1216,88 @@ class SacLauncher extends HTMLElement {
                     position: absolute;
                     inset: -5px;
                 }
+            }
+
+            /* Icons inside our buttons never take the pointer: a press must
+               land on the button itself (sac.sortable's ignore list matches
+               the pressed node, and sac-icon's svg sits in a shadow root). */
+            sac-launcher .sac-launcher-ctrl sac-icon,
+            sac-launcher .sac-launcher-menu > button sac-icon { pointer-events: none; }
+
+            /* Per-tile corner menu: bottom-right, in and out of edit mode
+               (the edit controls own the top-right corner, the badge too).
+               It rides the tile's hover lift so the two stay together. */
+            sac-launcher .sac-launcher-menu {
+                position: absolute;
+                right: 12px;
+                bottom: 12px;
+                transition: transform 0.4s var(--ease-bounce);
+            }
+            sac-launcher:not([edit]) .sac-launcher-cell:has(> .sac-launcher-tile:hover) > .sac-launcher-menu {
+                transform: translateY(-8px);
+            }
+            /* The trigger is an edit control (.sac-launcher-ctrl) and keeps
+               that look: sac-menu styles only its panel's items. */
+            sac-launcher .sac-launcher-menu-btn { --icon-size: 16px; }
+            sac-launcher .sac-launcher-menu[open] .sac-launcher-menu-btn { background: var(--hover-strong); }
+            sac-launcher .has-menu .sac-launcher-tile-body { padding-right: 28px; }
+            @media (hover: none) {
+                sac-launcher:not([edit]) .sac-launcher-cell:has(> .sac-launcher-tile:hover) > .sac-launcher-menu {
+                    transform: none;
+                }
+            }
+            @media (pointer: coarse) {
+                sac-launcher .has-menu .sac-launcher-tile-body { padding-right: 36px; }
+                /* sac-menu's touch rule makes every slotted button a 44px
+                   row — the trigger keeps its 36px look (the ::after halo
+                   makes the 44px target). */
+                sac-launcher .sac-launcher-menu-btn { min-height: 0; }
+            }
+            /* Narrow phones: tiles are rows (ui.css) — too short for a top
+               AND a bottom corner. The menu centres on the right edge, the
+               badge steps left of it, and in edit mode the controls take
+               the edge alone (the menu returns on Done). */
+            @media (max-width: 480px) {
+                sac-launcher .sac-launcher-menu {
+                    top: 50%;
+                    bottom: auto;
+                    margin-top: -14px;
+                }
+                sac-launcher .has-menu .tile-badge { right: 52px; }
+                sac-launcher[edit] .sac-launcher-menu { display: none; }
+            }
+            @media (max-width: 480px) and (pointer: coarse) {
+                sac-launcher .sac-launcher-menu { margin-top: -18px; }
+                sac-launcher .has-menu .tile-badge { right: 60px; }
+            }
+
+            /* Drag reorder. Edit mode: the inert tile shows it can be
+               grabbed. In flight: lifted look; its slot gets the outline. */
+            sac-launcher[edit] .sac-launcher-can-drag > .sac-launcher-cell:not(.sac-launcher-add-cell) > .sac-launcher-tile {
+                cursor: grab;
+            }
+            sac-launcher .sac-launcher-cell[data-sortable-dragging] > .sac-launcher-tile {
+                cursor: grabbing;
+                border-color: var(--accent);
+                box-shadow: var(--shadow-2);
+            }
+            /* A tile dragged past the grid's side must not widen the page
+               (a horizontal scrollbar flashing in and out mid-drag).
+               Vertical stays open: the page auto-scrolls on that axis. */
+            sac-launcher > .grid:has(> [data-sortable-dragging]) { overflow-x: clip; }
+            sac-launcher .sac-launcher-drop {
+                position: absolute;
+                z-index: 1;
+                box-sizing: border-box;
+                border: 1px dashed var(--accent);
+                border-radius: var(--radius-l);
+                background: var(--accent-tint);
+                pointer-events: none;
+            }
+            sac-launcher .sac-launcher-drop[hidden] { display: none; }
+            sac-launcher .sac-launcher-drop.placed {
+                transition: left 150ms var(--ease-smooth), top 150ms var(--ease-smooth),
+                            width 150ms var(--ease-smooth), height 150ms var(--ease-smooth);
             }
 
             /* The dashed "Add app" tile (edit mode only). */
@@ -997,13 +1388,20 @@ class SacLauncher extends HTMLElement {
             @media (prefers-reduced-motion: reduce) {
                 sac-launcher .sac-launcher-ctrl,
                 sac-launcher .sac-launcher-edit,
-                sac-launcher .sac-launcher-add { transition: none; }
+                sac-launcher .sac-launcher-add,
+                sac-launcher .sac-launcher-menu,
+                sac-launcher .sac-launcher-drop.placed { transition: none; }
             }
         `;
         document.head.appendChild(style);
     }
 }
 SacLauncher._instances = 0;
+/** What sac.sortable may lift: every tile cell (never the Add cell) — and,
+ *  outside edit mode (drag="always"), only the visible ones. */
+SacLauncher.DRAG_ITEMS =
+    "sac-launcher[edit] > .grid > .sac-launcher-cell:not(.sac-launcher-add-cell), " +
+    "sac-launcher:not([edit]) > .grid > .sac-launcher-cell:not(.sac-launcher-add-cell):not(.hidden-app)";
 /** Add-dialog fields: key → [label, placeholder] English fallbacks
  *  (keys launcher.field-<key> / launcher.placeholder-<key>). */
 SacLauncher.FIELDS = {

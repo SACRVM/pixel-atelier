@@ -232,8 +232,10 @@ class SacMenu extends HTMLElement {
                 /* NOTE: document styles beat ::slotted() styles for slotted
                    light-DOM children regardless of specificity (CSS scoping
                    cascade order) — ui.css's global button rule would wipe
-                   these. !important is the intended mechanism here. */
-                ::slotted(button) {
+                   these. !important is the intended mechanism here.
+                   Scoped to the panel's slot: the trigger is a slotted button
+                   too, and it keeps its own look (a .btn, an icon button). */
+                .panel ::slotted(button) {
                     display: flex !important;
                     align-items: center;
                     gap: 0.6rem;
@@ -248,21 +250,21 @@ class SacMenu extends HTMLElement {
                     text-align: left;
                     cursor: pointer;
                 }
-                ::slotted(button:hover),
-                ::slotted(button.hl) {
+                .panel ::slotted(button:hover),
+                .panel ::slotted(button.hl) {
                     background: var(--hover) !important;
                     color: var(--text) !important;
                 }
-                ::slotted(button[data-danger]:hover),
-                ::slotted(button[data-danger].hl) {
+                .panel ::slotted(button[data-danger]:hover),
+                .panel ::slotted(button[data-danger].hl) {
                     background: color-mix(in srgb, var(--danger) 14%, transparent) !important;
                     color: var(--danger-text) !important;
                 }
-                ::slotted(button[disabled]) {
+                .panel ::slotted(button[disabled]) {
                     opacity: 0.3;
                     cursor: not-allowed;
                 }
-                ::slotted(hr) {
+                .panel ::slotted(hr) {
                     border: none;
                     border-top: 1px solid var(--border);
                     margin: 4px 2px;
@@ -272,7 +274,7 @@ class SacMenu extends HTMLElement {
                 /* Touch: a 44px row per item. The look stays a menu row — only
                    the height grows. */
                 @media (pointer: coarse) {
-                    ::slotted(button) { min-height: 44px; }
+                    .panel ::slotted(button) { min-height: 44px; }
                 }
             </style>
             <span class="trigger"><slot name="trigger"></slot></span>

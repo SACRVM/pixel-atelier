@@ -34,6 +34,40 @@
  *   sac.files.use(sac.files.virtual());   // a desktop, once at boot
  *   sac.files.use(null);                  // back to the browser default
  *
+ * THE REMOTE PROVIDER PATTERN — a provider whose picker the HOST draws and
+ * whose handles only the host can read. The shape is the same three members;
+ * what makes it "remote" is two promises the provider keeps:
+ *
+ *   1. open() / save() draw their own UI in the host's page (sac.files.virtual
+ *      does: a <sac-dialog> + <sac-file-browser>) — the calling app never
+ *      sees the store, only the FileRef it is handed.
+ *   2. FileRef.handle is opaque: whatever the provider needs to write back
+ *      (a path, a server file id + etag, …), never something the caller must
+ *      understand. save({ handle }) with its own handle = Save, no dialog.
+ *
+ *   const remote = {
+ *       kind: "cloud",
+ *       async open(opts)       { const pick = await myPicker(opts);   // host UI
+ *                                return pick && { name: pick.name, file: pick.file,
+ *                                                 handle: { owner: remote, id: pick.id, etag: pick.etag } }; },
+ *       async save(blob, opts) { const h = opts.handle;                // ours: no picker
+ *                                if (h && h.owner === remote) { … write, If-Match h.etag …; return ref; }
+ *                                … else a save-as picker … },
+ *   };
+ *   sac.files.use(remote);
+ *
+ * An ISOLATED app (sac.apps, sandboxed frame) reaches the same provider
+ * through the bridge (kit/js/lib/app-bridge.js): its context.files is a proxy
+ * whose open/save post to the host, which runs the active provider — the
+ * picker opens in the top window. The provider's real handle stays in a
+ * per-frame table on the host; the app holds a random id that stands for it,
+ * hands it back on the next save() and the host resolves it — the path, the
+ * etag, the provider object never cross. Bytes cross as structured-cloned
+ * File / Blob (sac.apps.limits.maxBytes caps them; beyond, "too-large").
+ * A provider that refuses a save — a read-only space, a failed write —
+ * throws; give the Error `code: "denied"` for "not allowed" and the app sees
+ * that code (anything else arrives as "internal").
+ *
  * A handle remembers which provider made it and goes back there: a file
  * opened from the device is saved back to the device even while the desktop
  * space is the default. The app does not need to know.

@@ -17,6 +17,12 @@
  *   const t = sac.toast("Uploading…", { duration: 0 });
  *   t.dismiss();                                   // when the upload finishes
  *
+ *   // With an action — e.g. Undo after a move to the trash:
+ *   const u = sac.toast("Moved 3 files to the trash", {
+ *       action: { label: "Undo", labelKey: "files.undo", onClick: () => restore() },
+ *   });
+ *   if (await u.closed !== "action") purgeLater();
+ *
  *   // Explicit stack (e.g. a second one in another corner):
  *   <sac-toast-stack position="top-right"></sac-toast-stack>
  *
@@ -26,12 +32,25 @@
  *              Top corners clear the fixed 50px <sac-nav> ribbon.
  *
  * Methods:
- *   add(message, { kind, duration, title })
+ *   add(message, { kind, duration, title, action })
  *              kind:     "info" (default) | "success" | "warn" | "error"
  *                        → --accent / --ok / --accent-warm / --danger
- *              duration: ms until auto-dismiss (default 4000; 0 = sticky)
+ *              duration: ms until auto-dismiss (default 4000, or 8000 when
+ *                        the toast has an action; 0 = sticky)
  *              title:    optional bold line above the message
- *              → returns the toast element, carrying a .dismiss() method.
+ *              action:   optional { label, labelKey, onClick, dismissOnClick }
+ *                        — a text button between the message and the ×.
+ *                        label: button text (the fallback when labelKey is
+ *                        set); labelKey: a sac.t key, relabelled on a
+ *                        language switch; onClick(card): runs on click, then
+ *                        the toast dismisses — unless onClick returns false
+ *                        or dismissOnClick is false (the toast then stays;
+ *                        its timer restarts once pointer and focus leave).
+ *              → returns the toast element, carrying a .dismiss() method and
+ *                a .closed promise that resolves with how it ended:
+ *                "action" (the action ran — wins over the later exit),
+ *                "close" (the ×, or Escape), "swipe", "timeout", "dismiss"
+ *                (a .dismiss() call).
  *
  * API:
  *   sac.toast(message, opts) — same signature as add(), on the shared stack.
@@ -44,6 +63,11 @@
  *     so a message you reached for never vanishes mid-read.
  *   - Messages and titles are written with textContent, never innerHTML —
  *     toast strings routinely come from errors, files and users.
+ *   - A toast with an action also pauses while focus is inside it, and Escape
+ *     there dismisses it; focus it held returns to where it came from. The
+ *     button sits in the card, inside the polite live region, so its label
+ *     is read with the message ("Moved 3 files to the trash, Undo"). Tab
+ *     reaches it in document order (the stack is the last child of body).
  *   - The stack itself is pointer-events: none and stays in the DOM; only the
  *     cards are interactive.
  *
@@ -58,7 +82,7 @@
  *   - Swipe a toast sideways (past ~80px) to dismiss it; a shorter drag
  *     snaps back. Vertical drags still scroll the page.
  *   - Under (pointer: coarse) the close button keeps its 20px look with a
- *     44px hit area.
+ *     44px hit area; an action button grows to a real 44px target.
  */
 (function () {
 
@@ -82,8 +106,9 @@ class SacToastStack extends HTMLElement {
         if (this._offLang) { this._offLang(); this._offLang = null; }
     }
 
-    /** Language switch: region name + every live card's close label, in
-     *  place — timers, swipes and exit animations run on untouched. */
+    /** Language switch: region name + every live card's close label and
+     *  keyed action label, in place — timers, swipes and exit animations run
+     *  on untouched. */
     _relabel() {
         const region = this.shadowRoot.getElementById("region");
         if (!region) return;
@@ -91,13 +116,18 @@ class SacToastStack extends HTMLElement {
         for (const btn of region.querySelectorAll(".toast .close")) {
             btn.setAttribute("aria-label", t("toast.dismiss", "Dismiss"));
         }
+        for (const btn of region.querySelectorAll(".toast .action[data-label-key]")) {
+            btn.textContent = t(btn.dataset.labelKey, btn._fallback);
+        }
     }
 
     /**
      * Push a toast onto the stack.
-     * @returns {HTMLElement} the card, with a .dismiss() method attached.
+     * @returns {HTMLElement} the card, with a .dismiss() method and a
+     *          .closed promise ("action" | "close" | "swipe" | "timeout" |
+     *          "dismiss").
      */
-    add(message, { kind = "info", duration = 4000, title } = {}) {
+    add(message, { kind = "info", duration, title, action } = {}) {
         if (!this.shadowRoot.firstChild) this._render();
 
         const k = SacToastStack.KINDS[kind] ? kind : "info";
@@ -130,6 +160,28 @@ class SacToastStack extends HTMLElement {
         content.appendChild(msg);
         card.appendChild(content);
 
+        // Optional action. Built only when asked for — a plain toast keeps
+        // exactly its old markup, no placeholder slot.
+        const act = (action && action.label != null && String(action.label) !== "") ? action : null;
+        if (act) {
+            const btn = document.createElement("button");
+            btn.className = "action";
+            btn.type = "button";
+            btn._fallback = String(act.label);
+            if (act.labelKey) btn.dataset.labelKey = String(act.labelKey);
+            btn.textContent = act.labelKey ? t(String(act.labelKey), btn._fallback) : btn._fallback;
+            btn.addEventListener("click", () => {
+                if (card._leaving) return;
+                card._acted = true;
+                let ret;
+                try { ret = typeof act.onClick === "function" ? act.onClick(card) : undefined; }
+                catch (err) { console.error("[sac-toast] action failed:", err); }
+                if (ret === false || act.dismissOnClick === false) return;
+                this._dismiss(card, "action");
+            });
+            card.appendChild(btn);
+        }
+
         const close = document.createElement("button");
         close.className = "close";
         close.type = "button";
@@ -137,14 +189,40 @@ class SacToastStack extends HTMLElement {
         const closeIcon = document.createElement("sac-icon");
         closeIcon.setAttribute("name", "close");
         close.appendChild(closeIcon);
-        close.addEventListener("click", () => this._dismiss(card));
+        close.addEventListener("click", () => this._dismiss(card, "close"));
         card.appendChild(close);
 
         // Timer bookkeeping lives on the card so every handler below (and the
-        // caller's .dismiss()) works off one source of truth.
+        // caller's .dismiss()) works off one source of truth. An action needs
+        // time to be read, decided on and reached — hence the longer default.
+        if (duration === undefined) duration = act ? 8000 : 4000;
         card._duration = Number(duration) || 0;
         card._timer = null;
-        card.dismiss = () => this._dismiss(card);
+        card.closed = new Promise((resolve) => { card._resolve = resolve; });
+        card.dismiss = () => this._dismiss(card, "dismiss");
+
+        // Keyboard: focus inside an action toast holds its timer (the mouse
+        // pause's twin), Escape dismisses it. Where focus came from is kept
+        // so it can return there when the card leaves under it.
+        if (act) {
+            card.addEventListener("focusin", (e) => {
+                if (!card._focusReturn && e.relatedTarget && !card.contains(e.relatedTarget)) {
+                    card._focusReturn = e.relatedTarget;
+                }
+                card._focused = true;
+                this._clearTimer(card);
+            });
+            card.addEventListener("focusout", (e) => {
+                if (card.contains(e.relatedTarget)) return;
+                card._focused = false;
+                this._startTimer(card);
+            });
+            card.addEventListener("keydown", (e) => {
+                if (e.key !== "Escape") return;
+                e.stopPropagation();
+                this._dismiss(card, "close");
+            });
+        }
 
         // Pause while pointed at (mouse) or held (touch, pen). Pointer events
         // filtered by type, not mouseenter: a tap fires compat mouseenter
@@ -165,8 +243,9 @@ class SacToastStack extends HTMLElement {
 
     _startTimer(card) {
         this._clearTimer(card);
-        if (card._duration > 0 && !card._leaving) {
-            card._timer = setTimeout(() => this._dismiss(card), card._duration);
+        // A focused action toast stays until focus leaves it.
+        if (card._duration > 0 && !card._leaving && !card._focused) {
+            card._timer = setTimeout(() => this._dismiss(card, "timeout"), card._duration);
         }
     }
 
@@ -220,19 +299,33 @@ class SacToastStack extends HTMLElement {
         if (card._leaving) return;
         card._leaving = true;
         this._clearTimer(card);
+        this._settle(card, "swipe");
         card.classList.add("swiped");
         card.style.translate = `${dx > 0 ? "" : "-"}110% 0`;
         setTimeout(() => card.remove(), 200);
     }
 
-    _dismiss(card) {
+    _dismiss(card, reason = "dismiss") {
         if (card._leaving) return;
         card._leaving = true;
         this._clearTimer(card);
+        this._settle(card, reason);
         card.classList.add("out");
         // Timer, not animationend: with prefers-reduced-motion the animation
         // is neutralized and animationend may never fire.
         setTimeout(() => card.remove(), 200);
+    }
+
+    /** Resolve .closed (an action that ran wins) and, when the card holds
+     *  focus, hand it back before the card disappears under it. */
+    _settle(card, reason) {
+        if (card._resolve) { card._resolve(card._acted ? "action" : reason); card._resolve = null; }
+        const active = this.shadowRoot.activeElement;
+        if (active && card.contains(active)) {
+            const back = card._focusReturn;
+            if (back && back.isConnected && typeof back.focus === "function") back.focus();
+            else active.blur();
+        }
     }
 
     _render() {
@@ -374,6 +467,31 @@ class SacToastStack extends HTMLElement {
                     outline-offset: 1px;
                 }
 
+                /* Action: a quiet text button in the accent's AA text colour,
+                   on the first line like the icon. A tint on hover — never a
+                   filled chip, a toast is not a dialog. */
+                .action {
+                    flex: none;
+                    margin: -3px 0 0;
+                    padding: 3px 8px;
+                    border: none;
+                    border-radius: var(--radius-m);
+                    background: transparent;
+                    color: var(--accent-text);
+                    font: inherit;
+                    font-size: 0.8rem;
+                    font-weight: 600;
+                    line-height: 1.4;
+                    white-space: nowrap;
+                    cursor: pointer;
+                    transition: background 120ms var(--ease-smooth);
+                }
+                .action:hover { background: var(--accent-tint); }
+                .action:focus-visible {
+                    outline: 2px solid var(--accent);
+                    outline-offset: 1px;
+                }
+
                 @keyframes toast-in {
                     from { opacity: 0; transform: translateX(var(--slide-from)); }
                     to   { opacity: 1; transform: translateX(0); }
@@ -431,6 +549,15 @@ class SacToastStack extends HTMLElement {
                         position: absolute;
                         inset: -12px;
                     }
+                    /* A real 44px target, its label still on the message's
+                       first line: negative margins keep the card height, the
+                       right one keeps the ×'s halo off it. */
+                    .action {
+                        min-height: 44px;
+                        min-width: 44px;
+                        margin: -12px 4px -12px 0;
+                        padding: 0 12px;
+                    }
                 }
 
                 /* Motion is decoration here — the message and the dismissal
@@ -444,7 +571,8 @@ class SacToastStack extends HTMLElement {
                     }
                     .toast.out { opacity: 0; }
                     .toast.swiped { transition: none; }
-                    .close { transition: none; }
+                    .close,
+                    .action { transition: none; }
                 }
             </style>
             <div class="region" id="region" role="region" aria-live="polite" aria-label="${L.region}"></div>

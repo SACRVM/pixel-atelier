@@ -40,6 +40,7 @@
         "lib/about.js",   // sac.about — the shared About window (a peer of sac.dialog)
         "lib/pan-zoom.js",
         "lib/apps.js",
+        "lib/app-bridge.js", // isolated apps: host half (the guest runtime app-guest.js is loaded by the frame, never here)
         "lib/hotkeys.js",
         "lib/sortable.js", // drag-reorder — filmstrip + layer list use it
         "lib/color.js",
