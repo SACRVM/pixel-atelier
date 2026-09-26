@@ -753,7 +753,7 @@
                         background: var(--ca);        /* data, not theme */
                     }
                     .hex {
-                        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                        font-family: var(--font-mono);
                         letter-spacing: 0.02em;
                         padding: 7px 8px;
                     }

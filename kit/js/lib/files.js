@@ -44,7 +44,12 @@
  *   save(data, opts)    → FileRef | null
  *       data: Blob | string | JSON-able value (strings → text/plain,
  *             values → application/json)
- *       opts: { name, type, accept, handle, title }
+ *       opts: { name, type, accept, handle, title, onProgress }
+ *       onProgress(loaded, total) hears the write when the provider's store
+ *       reports it (virtual: a store whose write() takes { onProgress }). The
+ *       virtual save dialog shows the same progress itself: it stays up with
+ *       a bar while such a store uploads, and closes at once, as before, when
+ *       the store reports nothing.
  *   kind                the active provider's kind — "browser", "virtual",
  *                       or a host's own — e.g. to word a toast ("Downloaded"
  *                       vs "Saved")
@@ -55,8 +60,9 @@
  *
  * Language: the virtual dialog's kit strings follow a runtime switch while
  * it is open (title unless the caller gave one, buttons, the name label,
- * the device link; the file list relabels itself). The replace question is
- * a short-lived confirm — its buttons follow, its text is set once.
+ * the device link, the save progress label; the file list relabels itself).
+ * The replace question is a short-lived confirm — its buttons follow, its
+ * text is set once.
  */
 (function () {
     if (!window.sac) { console.warn("[sac.files] globals.js must load first — files unavailable."); return; }
@@ -88,6 +94,24 @@
     }
 
     const ref = (name, file, handle) => ({ name, file, handle: handle || null });
+
+    /** A write through sac.fs.ops when it is loaded (it knows the optional
+     *  store methods), else straight to the store — which may ignore opts. */
+    function storeWrite(store, path, value, opts) {
+        if (sac.fs && sac.fs.ops) return sac.fs.ops.write(store, path, value, opts);
+        return store.write(path, value, opts);
+    }
+
+    /** onProgress callbacks, all of them, none allowed to break a save. */
+    function fanOut(...cbs) {
+        const live = cbs.filter((cb) => typeof cb === "function");
+        return (loaded, total) => {
+            for (const cb of live) {
+                try { cb(loaded, total); }
+                catch (err) { console.error("[sac.files] onProgress threw:", err); }
+            }
+        };
+    }
 
     /** The <input accept> grammar as FS Access `types` — mime keys, ext lists. */
     function pickerTypes(accept, description) {
@@ -231,6 +255,8 @@
             .sac-files-device:hover { text-decoration: underline; }
             .sac-files-device:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-s); }
             .sac-files-device svg { width: 14px; height: 14px; }
+            .sac-files-progress[hidden] { display: none; }
+            .sac-files-body[inert] > :not(.sac-files-progress) { opacity: 0.55; }
         `;
         document.head.appendChild(style);
     }
@@ -242,11 +268,22 @@
 
     const extOf = (name) => { const m = /\.[^./]+$/.exec(name || ""); return m ? m[0].toLowerCase() : ""; };
 
+    /* How long a save waits for the store to report progress before closing
+       the dialog the old way — an opaque await. A store that reports in time
+       keeps the dialog up with a progress bar until the write lands. */
+    const PROGRESS_GRACE_MS = 250;
+
     /**
      * The dialog: resolves { paths } (open), { path } (save), { device: true }
      * (the user asked for the device instead) or null (cancelled).
+     *
+     * Save with `commit(path, onProgress)`: the write runs while the dialog
+     * is still up, and it resolves { path, result } or { path, error }. If
+     * the store reports progress (loaded < total) within the grace period the
+     * dialog shows it and closes when the write lands; otherwise it closes at
+     * once, as it always did, and the answer still waits for the write.
      */
-    function dialog({ mode, store, accept, multiple, name, title, label, pixelated }) {
+    function dialog({ mode, store, accept, multiple, name, title, label, pixelated, commit }) {
         injectCss();
         return new Promise((resolve) => {
             const saving = mode === "save";
@@ -290,6 +327,15 @@
             device.innerHTML = `${icon(saving ? "download" : "upload")}<span></span>`;
             device.addEventListener("click", () => { choice = { device: true }; dlg.close("device"); });
             body.appendChild(device);
+
+            // Save progress: hidden until the store reports some.
+            let bar = null;
+            if (saving) {
+                bar = document.createElement("sac-progress");
+                bar.className = "sac-files-progress";
+                bar.hidden = true;
+                body.appendChild(bar);
+            }
             dlg.appendChild(body);
 
             // Kit strings as text / attributes on the live nodes — run now
@@ -301,6 +347,7 @@
                 device.querySelector("span").textContent = saving
                     ? t("files.to-device", "Save to this device instead…")
                     : t("files.from-device", "Open from this device…");
+                if (bar) bar.setAttribute("label", t("files.saving", "Saving…"));
             };
             relabel();
             const offLang = sac.lang ? sac.lang.onChange(relabel) : () => {};
@@ -353,13 +400,59 @@
                     });
                     if (answer !== "replace") return false;
                 }
-                choice = { path };
-                return true;
+                if (!commit) {
+                    choice = { path };
+                    return true;
+                }
+                return write(path);
             };
 
-            dlg.addEventListener("sac:action", () => {
+            /* The write, inside the dialog. Everything but the progress bar is
+               frozen meanwhile; Escape is held back (the backdrop cannot be —
+               closing mid-write still answers once the write lands). */
+            let writing = null;
+            const holdEscape = (e) => {
+                if (e.key === "Escape") { e.stopImmediatePropagation(); e.preventDefault(); }
+            };
+            async function write(path) {
+                let reported = false;
+                const onProgress = (loaded, total) => {
+                    const known = total > 0 && Number.isFinite(total);
+                    if (known && loaded >= total && !reported) return;   // done-at-once: nothing to show
+                    reported = true;
+                    bar.hidden = false;
+                    if (known) {
+                        bar.removeAttribute("indeterminate");
+                        bar.setAttribute("max", String(total));
+                        bar.setAttribute("value", String(Math.min(loaded, total)));
+                    } else {
+                        bar.setAttribute("indeterminate", "");
+                    }
+                };
+                body.inert = true;
+                dlg.setDisabled("cancel", true);
+                dlg.setDisabled("ok", true);
+                window.addEventListener("keydown", holdEscape, true);
+                const release = () => window.removeEventListener("keydown", holdEscape, true);
+                writing = Promise.resolve()
+                    .then(() => commit(path, onProgress))
+                    .then((result) => ({ path, result }), (error) => ({ path, error }));
+                writing.then(release);
+                const early = await Promise.race([
+                    writing,
+                    new Promise((r) => setTimeout(() => r(null), PROGRESS_GRACE_MS)),
+                ]);
+                if (!early && reported) await writing;
+                // Else no progress from the store: close now, as a save always
+                // did. The answer still waits for the write (sac:action).
+                release();
+                return true;
+            }
+
+            dlg.addEventListener("sac:action", async () => {
                 offLang();
-                setTimeout(() => { dlg.remove(); resolve(choice); }, 120);
+                const answer = writing ? await writing : choice;
+                setTimeout(() => { dlg.remove(); resolve(answer); }, 120);
             }, { once: true });
 
             document.body.appendChild(dlg);
@@ -410,17 +503,23 @@
             async save(blob, opts = {}) {
                 const h = opts.handle;
                 if (h && h.owner === provider && h.path) {
-                    await store.write(h.path, blob);
+                    // Save onto a known file: no dialog, so progress goes to
+                    // the caller's opts.onProgress only.
+                    await storeWrite(store, h.path, blob, { onProgress: fanOut(opts.onProgress) });
                     const fileName = h.path.slice(h.path.lastIndexOf("/") + 1);
                     return ref(fileName, asFile(blob, fileName), h);
                 }
                 const answer = await dialog({
                     mode: "save", store, name: opts.name || "untitled", title: opts.title,
                     label: options.label, pixelated: options.pixelated,
+                    // Replacing an existing file is a plain write — the store
+                    // overwrites; the dialog asked first.
+                    commit: (path, onProgress) => storeWrite(store, path, blob,
+                        { onProgress: fanOut(onProgress, opts.onProgress) }),
                 });
                 if (!answer) return null;
                 if (answer.device) return browser.save(blob, Object.assign({}, opts, { handle: null }));
-                await store.write(answer.path, blob);
+                if (answer.error) throw answer.error;
                 const fileName = answer.path.slice(answer.path.lastIndexOf("/") + 1);
                 return ref(fileName, asFile(blob, fileName), { owner: provider, path: answer.path });
             },

@@ -72,10 +72,12 @@
         // which builds a calendar inside its popover.
         "components/sac-calendar.js",
         "components/sac-date-field.js",
+        "components/sac-time-field.js",
 
         "components/sac-collapsible.js",
         "components/sac-drop-zone.js",
         "components/sac-file-browser.js",
+        "components/sac-quick-look.js",
         "components/sac-status-banner.js",
         "components/sac-loader.js",
         "components/sac-log.js",
@@ -103,6 +105,7 @@
         "components/sac-filmstrip.js",
         "components/sac-layer-list.js",
         "components/sac-shortcut-sheet.js",
+        "components/sac-shortcut-bar.js",
     ];
 
     let pending = files.length;

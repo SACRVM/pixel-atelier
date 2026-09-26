@@ -593,7 +593,7 @@
                     /* The ui.css <kbd> baseline, re-stated for the shadow root. */
                     kbd {
                         flex: none;
-                        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                        font-family: var(--font-mono);
                         font-size: 0.72rem;
                         background: var(--field);
                         border: 1px solid var(--border-strong);

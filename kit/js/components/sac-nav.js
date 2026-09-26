@@ -80,6 +80,15 @@
  *   open() / close() / toggle() — what the burger does (the drawer on
  *          compact with a rail, else the panel). open() is a no-op when
  *          there is nothing to open.
+ *   setOverflowGroup(owner, entries) — lets ANY element contribute a group
+ *          of entries to the "…" menu (see TOOLBAR OVERFLOW). `owner` is the
+ *          key (normally the contributing element itself); `entries` is
+ *          [{ label, icon?, disabled?, danger?, run(event) }] — `run` gets
+ *          the menu's sac:select event. Pass null or [] to withdraw the
+ *          group. Re-call it to relabel (e.g. on a language switch). A group
+ *          whose owner element has left the DOM is dropped on the next
+ *          layout. <sac-shortcut-bar> uses this to fold into the nav on
+ *          compact.
  *
  * Events:
  *   sac:nav-open / sac:nav-close — detail { drawer } — the burger's panel
@@ -139,7 +148,9 @@
  * folded as ONE item: its entries join the "…" menu as a group (after a
  * separator), and choosing one fires the original menu's sac:select, so the
  * app's listener runs unchanged. Mark a control data-overflow="never" to
- * keep it in the ribbon. Needs sac-menu loaded;
+ * keep it in the ribbon. Groups contributed with setOverflowGroup() follow
+ * the folded controls, each behind a separator, in contribution order; while
+ * one has entries the "…" shows at every width. Needs sac-menu loaded;
  * without it nothing overflows.
  *
  * Layout contract: content below needs padding-top: 50px plus the top safe
@@ -178,6 +189,17 @@ class SacNav extends HTMLElement {
         this._inerted = [];
         this._overflowed = [];
         this._overflowFrame = 0;
+        this._groups = new Map();     // setOverflowGroup(): owner → entries
+    }
+
+    /** Contribute (or withdraw, with null / []) a group of "…" menu entries.
+     *  See the header, Methods. */
+    setOverflowGroup(owner, entries) {
+        if (owner == null) return;
+        const list = Array.isArray(entries) ? entries.filter((e) => e && typeof e.run === "function") : [];
+        if (list.length) this._groups.set(owner, list);
+        else this._groups.delete(owner);
+        this._scheduleOverflow();
     }
 
     /** The host's injection (see header). Assign context.host in mount().
@@ -986,6 +1008,11 @@ class SacNav extends HTMLElement {
         more.addEventListener("sac:select", (e) => {
             e.stopPropagation();
             const entry = this._moreEntries && this._moreEntries[Number(e.detail && e.detail.action)];
+            if (entry && entry.run) {        // a setOverflowGroup() entry
+                try { entry.run(e); }
+                catch (err) { console.error("[sac-nav] overflow entry threw:", err); }
+                return;
+            }
             if (!entry || !entry.el.isConnected) return;
             if (entry.action == null) { entry.el.click(); return; }
             entry.el.dispatchEvent(new CustomEvent("sac:select", {
@@ -1242,13 +1269,34 @@ class SacNav extends HTMLElement {
             if (!this._roWatched) this._roWatched = new WeakSet();
             if (this._ro && !this._roWatched.has(el)) { this._ro.observe(el); this._roWatched.add(el); }
         }
-        more.hidden = true;
+        // Contributed groups (setOverflowGroup) keep the "…" out on their own;
+        // an owner element that left the DOM without withdrawing is dropped.
+        this._groups.forEach((_, owner) => {
+            if (owner instanceof Node && !owner.isConnected) this._groups.delete(owner);
+        });
+        const groups = customElements.get("sac-menu") ? [...this._groups.values()] : [];
+        more.hidden = !groups.length;
 
         const brand = sr.querySelector(".brand:not(.host-jump)");
         const context = sr.querySelector(".context");
         // Measured on the ribbon's own children, not ribbon.scrollWidth: a
         // descendant's closed popover may still take layout and would count
         // as overflow.
+        // Truncated = the text is really wider than its box. scrollWidth and
+        // clientWidth are rounded integers, so a 1px difference is measured
+        // exactly (text range vs. content box) instead of being tolerated —
+        // a tolerated pixel still renders the ellipsis.
+        const truncated = (el) => {
+            if (!el || el.scrollWidth <= el.clientWidth) return false;
+            if (el.scrollWidth > el.clientWidth + 1) return true;
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const cs = getComputedStyle(el);
+            const inner = el.getBoundingClientRect().width
+                - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+                - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth);
+            return range.getBoundingClientRect().width > inner + 0.25;
+        };
         const fits = () => {
             const box = ribbon.getBoundingClientRect();
             const limit = box.right - parseFloat(getComputedStyle(ribbon).paddingRight) + 1;
@@ -1258,7 +1306,7 @@ class SacNav extends HTMLElement {
             // measure them, not only the link around them.
             ![brand, ...(brand ? brand.querySelectorAll("span") : []),
               ...sr.querySelectorAll(".compact-title, .cid-text")]
-                .some((el) => el && el.scrollWidth > el.clientWidth + 1) &&
+                .some(truncated) &&
                 (!context || context.scrollWidth <= context.clientWidth + 1);
         };
 
@@ -1270,7 +1318,7 @@ class SacNav extends HTMLElement {
                 visible[i].setAttribute("data-sac-overflow", "");
                 over.unshift(visible[i]);
             }
-            if (!over.length) more.hidden = true;
+            if (!over.length && !groups.length) more.hidden = true;
         }
         this._overflowed = over;
 
@@ -1314,6 +1362,25 @@ class SacNav extends HTMLElement {
             entries.push({ el, action: null });
             addButton(el, el.textContent.trim() || el.getAttribute("aria-label") || el.title || "",
                 el.disabled || el.getAttribute("aria-disabled") === "true");
+        });
+        // Contributed groups: each behind a separator, after the folded controls.
+        groups.forEach((group) => {
+            if (more.querySelector("[data-action]")) more.appendChild(document.createElement("hr"));
+            group.forEach((g) => {
+                entries.push({ run: g.run });
+                const b = document.createElement("button");
+                b.type = "button";
+                b.dataset.action = String(entries.length - 1);
+                if (g.disabled) b.disabled = true;
+                if (g.danger) b.setAttribute("data-danger", "");
+                if (g.icon) {
+                    const ic = document.createElement("sac-icon");
+                    ic.setAttribute("name", g.icon);
+                    b.appendChild(ic);
+                }
+                b.appendChild(document.createTextNode(g.label == null ? "" : String(g.label)));
+                more.appendChild(b);
+            });
         });
         this._moreEntries = entries;
     }

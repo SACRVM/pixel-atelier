@@ -55,7 +55,7 @@ class SacHud extends HTMLElement {
                     padding: 0.5rem 0.75rem;
                     color: color-mix(in srgb, var(--fg) 78%, var(--bg));
                     font-size: 0.8rem;
-                    font-family: ui-monospace, 'Cascadia Mono', 'Courier New', monospace;
+                    font-family: var(--font-mono);
                     pointer-events: none;
                     z-index: 10;
                 }

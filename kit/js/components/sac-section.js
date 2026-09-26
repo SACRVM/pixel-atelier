@@ -89,12 +89,16 @@ class SacSection extends HTMLElement {
                 /* Height transition via the 0fr/1fr grid-row trick: no measuring.
                    The gap above the body lives inside the fold (padding), so a
                    folded section is just its underlined title. */
+                /* minmax(0, 1fr) + min-width: 0: a grid item's min-width is
+                   auto (= min-content), which would let a scrolling or
+                   ellipsizing child (a tab strip) widen the whole section. */
                 .fold {
                     display: grid;
+                    grid-template-columns: minmax(0, 1fr);
                     grid-template-rows: 1fr;
                     transition: grid-template-rows 0.2s ease, visibility 0s linear 0s;
                 }
-                .clip { min-height: 0; }
+                .clip { min-height: 0; min-width: 0; }
                 .fold.moving .clip { overflow: hidden; }
                 :host([collapsible][collapsed]) .fold {
                     grid-template-rows: 0fr;

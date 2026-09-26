@@ -208,4 +208,51 @@
     });
     last = current();
     document.documentElement.lang = last;
+
+    /* ----------------------------------------------------- regional -- */
+
+    /**
+     * regional — the page-wide date and time FORMAT, separate from the
+     * language: an English UI with German dates is a normal wish. No web API
+     * exposes the OS regional format (anti-fingerprinting — Intl follows the
+     * browser's UI language), so this is an explicit app / host setting.
+     * Fields without their own `format` / `hour-cycle` attribute follow it.
+     * Not persisted by the kit: the app (or the host) owns the user setting
+     * and calls set() on load.
+     *
+     *   get()          { date, hourCycle } — date: "iso" | "dmy." | "dmy/" |
+     *                  "mdy/"; hourCycle: "h23" | "h12". Default iso / h23.
+     *   set(partial)   merge, e.g. set({ date: "dmy.", hourCycle: "h23" });
+     *                  unknown values are ignored
+     *   onChange(cb)   cb({ date, hourCycle }); returns an unsubscribe
+     *
+     * Event: sac:regional on document, detail { date, hourCycle }.
+     */
+    const DATE_FORMATS = ["iso", "dmy.", "dmy/", "mdy/"];
+    const HOUR_CYCLES = ["h23", "h12"];
+    const regional = { date: "iso", hourCycle: "h23" };
+    const regionalListeners = new Set();
+
+    window.sac.regional = {
+        get() { return { date: regional.date, hourCycle: regional.hourCycle }; },
+        set(partial) {
+            const p = partial || {};
+            const date = DATE_FORMATS.includes(p.date) ? p.date : regional.date;
+            const hourCycle = HOUR_CYCLES.includes(p.hourCycle) ? p.hourCycle : regional.hourCycle;
+            if (date === regional.date && hourCycle === regional.hourCycle) return;
+            regional.date = date;
+            regional.hourCycle = hourCycle;
+            const now = this.get();
+            for (const cb of regionalListeners) {
+                try { cb(now); }
+                catch (err) { console.error("[sac.regional] a listener threw:", err); }
+            }
+            document.dispatchEvent(new CustomEvent("sac:regional", { detail: now, bubbles: true }));
+        },
+        onChange(cb) {
+            if (typeof cb !== "function") return () => {};
+            regionalListeners.add(cb);
+            return () => regionalListeners.delete(cb);
+        },
+    };
 })();

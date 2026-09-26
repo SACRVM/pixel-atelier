@@ -360,7 +360,7 @@ class SacColorField extends HTMLElement {
                     height: 32px;              /* control-row height, see .well */
                     box-sizing: border-box;
                     padding: 0.35rem 0.5rem;
-                    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                    font-family: var(--font-mono);
                     font-size: 0.78rem;
                     color: var(--text);
                     background: var(--field);

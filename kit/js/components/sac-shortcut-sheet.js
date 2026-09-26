@@ -369,7 +369,7 @@ class SacShortcutSheet extends HTMLElement {
                 }
                 /* The ui.css kbd recipe, re-stated for the shadow root. */
                 kbd {
-                    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                    font-family: var(--font-mono);
                     font-size: 0.95em;
                     background: var(--field);
                     border: 1px solid var(--border-strong);
