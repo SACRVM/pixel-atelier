@@ -1,11 +1,37 @@
 {
+  // Firepit per-project config. JSONC: comments and trailing commas are allowed.
+  // Commands follow the Linux patterns of ../firepit-template/.firepit/config.json:
+  // a group per area, a short lowercase name, a one-line description.
+
   "version": 1,
   "id": "pixel-atelier",
+
   "commands": [
-    { "name": "Serve", "type": "Shell", "icon": "🚀", "command": "cmd",
-      "args": ["/c", "npx", "serve", ".", "-l", "3340"],
-      "window": "reuse:serve", "longRunning": true },
-    { "name": "Open", "type": "Url", "icon": "🎨", "url": "http://localhost:3340/" },
-    { "name": "GitHub", "type": "Url", "icon": "🐙", "url": "https://github.com/SACRVM/pixel-atelier" }
+    {
+      "group": "Run",
+      "name": "site",
+      "description": "Serves the app on port 3340 (also reachable from a phone on the LAN, to try touch painting).",
+      "type": "shell",
+      "command": "python3",
+      "args": ["-m", "http.server", "3340"],
+      "window": "reuse:site",
+      "longRunning": true
+    },
+
+    {
+      "group": "Open",
+      "name": "app",
+      "description": "The editor on the local server.",
+      "type": "url",
+      "url": "http://localhost:3340/"
+    },
+
+    {
+      "group": "Git",
+      "name": "repo",
+      "description": "The repository on GitHub.",
+      "type": "url",
+      "url": "https://github.com/SACRVM/pixel-atelier"
+    }
   ]
 }

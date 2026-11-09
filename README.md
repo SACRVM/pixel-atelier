@@ -6,11 +6,12 @@ in the browser with no install and no build step. Built on
 as an app on a SACRVM desktop.
 
 ```bash
-npx serve .
+python3 -m http.server 3340
 ```
 
-`serve.json` tells the dev server not to cache, so a reload always picks up
-the current files.
+Then open http://localhost:3340/. Any static server works; with
+`npx serve . -l 3340`, `serve.json` also turns caching off, so a plain reload
+always picks up the current files.
 
 ## What it does
 

@@ -52,8 +52,9 @@ standalone harness, and `kit/` — the vendored kit. See
 [sacrvm-notes](https://github.com/SACRVM/sacrvm-notes) for a complete example
 and the appkit's `CONSUMING.md` for the vendoring recipe.
 
-**No build step, ever.** Vanilla custom elements, plain CSS, `npx serve .` and
-F5 — no node_modules, no bundler, no TypeScript.
+**No build step, ever.** Vanilla custom elements, plain CSS, a static server
+(`python3 -m http.server 3340`, the Firepit button *Run site*) and F5 — no
+node_modules, no bundler, no TypeScript.
 
 **The kit is vendored** (autark): `kit/` is the release ZIP's copy, dropped in
 verbatim — `kit/VERSION` says which — and never edited here. Use only the
