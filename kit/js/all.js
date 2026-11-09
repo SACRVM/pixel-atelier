@@ -34,6 +34,7 @@
         "lib/globals.js",
         "i18n/de.js",      // the kit's own strings in German (sac.lang)
         "lib/icons.js",
+        "lib/motion.js",  // sac.motion — springs for gesture releases (window, sheet, drawer, split, sortable)
         "lib/router.js",
         "lib/scope.js",
         "lib/dialog.js",
@@ -42,12 +43,15 @@
         "lib/apps.js",
         "lib/app-bridge.js", // isolated apps: host half (the guest runtime app-guest.js is loaded by the frame, never here)
         "lib/hotkeys.js",
-        "lib/sortable.js", // drag-reorder — filmstrip + layer list use it
+        "lib/sortable.js", // drag-reorder (sac.sortable, sac.tiles.sortable) — filmstrip, layer list, launcher
+        "lib/selection.js", // sac.selection — mark several rows of a plain list
+        "lib/context-menu.js", // sac.contextMenu + long-press = right-click, kit-wide
         "lib/color.js",
         "lib/fs.js",      // storage capability — apps.js hands it to apps
         "lib/identity.js",// who is at this desktop (rides on the fs backend)
         "lib/files.js",   // the user's files — open / save (context.files)
         "lib/app.js",     // the app-side toolkit (apps.js is the host side)
+        "lib/showcase.js",// API-page helpers (pair with css/showcase.css) — docs pages only
 
         // components — any order, except where a comment says otherwise
         "components/sac-icon.js",
@@ -74,6 +78,8 @@
         "components/sac-calendar.js",
         "components/sac-date-field.js",
         "components/sac-time-field.js",
+        "components/sac-number-field.js",
+        "components/sac-select.js",
 
         "components/sac-collapsible.js",
         "components/sac-drop-zone.js",

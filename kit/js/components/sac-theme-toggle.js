@@ -214,6 +214,13 @@ class SacThemeToggle extends HTMLElement {
                 .cycle[data-current="light"] .i-light,
                 .cycle[data-current="auto"]  .i-auto { display: block; }
                 .cycle:hover { background: var(--hover); color: var(--text); }
+                /* Press (a segment or the cycle button): a wash the moment it
+                   goes down. The current segment keeps its fill; the
+                   specificity beats both (hover: none) resets below. */
+                button:active:not(.active) {
+                    background: var(--hover-strong);
+                    transition-duration: 0s;
+                }
                 button:focus-visible {
                     outline: 2px solid var(--accent);
                     outline-offset: 2px;

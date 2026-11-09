@@ -698,6 +698,8 @@ class SacQuickLook extends HTMLElement {
                     cursor: pointer;
                 }
                 .seg:hover { background: var(--hover); color: var(--text); }
+                /* Press: the strong wash at once; the pressed segment keeps its tint. */
+                .seg:not([aria-pressed="true"]):active { background: var(--hover-strong); color: var(--text); transition-duration: 0s; }
                 .seg[aria-pressed="true"] { background: var(--accent-tint); color: var(--accent-text); }
                 .seg:focus-visible, .btn:focus-visible, .nav:focus-visible {
                     outline: 2px solid var(--accent);
@@ -782,9 +784,11 @@ class SacQuickLook extends HTMLElement {
                     font-size: 0.8rem;
                     font-weight: 600;
                     text-decoration: none;
-                    transition: background 150ms var(--ease-smooth);
+                    transition: background 150ms var(--ease-smooth), transform 0.2s var(--ease-smooth);
                 }
                 .btn:hover { background: var(--accent-strong); }
+                /* Press: answers the moment it goes down. */
+                .btn:active { transform: scale(0.97); transition-duration: 0.1s; }
 
                 /* ‹ › — only with the nav attribute */
                 .nav {
@@ -805,9 +809,12 @@ class SacQuickLook extends HTMLElement {
                     cursor: pointer;
                     --icon-size: 18px;
                     opacity: 0.75;
-                    transition: opacity 150ms var(--ease-smooth), background 150ms var(--ease-smooth);
+                    transition: opacity 150ms var(--ease-smooth), background 150ms var(--ease-smooth),
+                                transform 0.2s var(--ease-smooth);
                 }
                 .nav:hover { opacity: 1; background: linear-gradient(var(--hover), var(--hover)), var(--glass-strong); }
+                /* Press: keeps the vertical centring, gives under the pointer. */
+                .nav:active:not(:disabled) { opacity: 1; transform: translateY(-50%) scale(0.97); transition-duration: 0.1s; }
                 .prev { left: 8px; }
                 .next { right: 8px; }
                 :host([nav=""]) .nav,

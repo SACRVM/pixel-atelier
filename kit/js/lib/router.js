@@ -33,11 +33,37 @@
  *   location.pathname:
  *   sac.router.register("/svg-to-world/", null, { label: "SVG to World", icon: "shapes" });
  *
+ * options.nav: false keeps a route out of sac-nav's panel; it still matches,
+ * mounts and lists in routes() (with nav: false), for a host that shows it its
+ * own way. options.palette: false does the same for the Ctrl-K palette.
+ *
+ * A route can go again: sac.router.unregister("#/files/*") (or the base hash)
+ * drops it and fires sac:route-unregistered — for routes a host registers per
+ * dynamic item (a workspace's page apps) and drops when the item goes away.
+ * A root prefix route ("#/*") is stored under "#/", like the home route.
+ *
  * Scoped workspaces: when scope.js is loaded, a `#/scope/SLUG/...` prefix is
  * stripped before route lookup, so one registration serves both the root and
  * any scoped workspace (see scope.js). A prefix route's sub-path is read
  * after the strip, and a scope switch keeps the view mounted (it gets a
  * `sac:route` with the new hash, and sac:scope-changed as always).
+ *
+ * A view that only makes sense in one kind of workspace says so:
+ *   sac.router.register("#/tables/*", "my-tables-view", { label: "Tables", scope: "scoped" });
+ *   sac.router.register("#/secrets",  "my-secrets-view", { label: "Secrets", scope: "root" });
+ *   // options.scope: "any" (default) | "root" | "scoped". Outside its
+ *   // workspace the route does not exist: <sac-nav> and the Ctrl-K palette
+ *   // leave it out, and the router treats its hash as unmatched (falls
+ *   // back like an unknown route). sac.router.inScope(route) is the same
+ *   // test for apps that build their own lists from routes().
+ *
+ * An entry that opens something instead of showing a view (a window app):
+ *   sac.router.register("#/messages", null, { label: "Messages", icon: "users",
+ *                                             open: () => sac.apps.open("messages") });
+ *   // Listed like any route, in registration order — <sac-nav>'s burger and
+ *   // the Ctrl-K palette call open(route) instead of navigating. The hash is
+ *   // only the entry's key: it never matches, so a typed link to it falls
+ *   // back like an unknown route.
  */
 (function () {
     if (!window.sac) { console.warn("[sac.router] globals.js must load first — router unavailable."); return; }
@@ -58,19 +84,38 @@
         return sac.scope ? sac.scope.stripPrefix(hash) : hash;
     }
 
+    // "root" | "scoped" — the active workspace kind ("root" without scope.js).
+    function scopeType() {
+        return sac.scope ? sac.scope.get().type : "root";
+    }
+
+    function inScope(entry) {
+        return !entry || !entry.scope || entry.scope === "any" || entry.scope === scopeType();
+    }
+
+    /** A registered hash → its key: "#/files/*" → "#/files" (a prefix
+     *  route), "#/*" → "#/" (the root prefix, never a bare "#"). */
+    function keyOf(hash) {
+        const prefix = /\/\*$/.test(hash);
+        if (!prefix) return { key: hash, prefix };
+        const key = hash.slice(0, -2);
+        return { key: key === "" || key === "#" ? "#/" : key, prefix };
+    }
+
     function decode(part) {
         try { return decodeURIComponent(part); } catch (_) { return part; }
     }
 
     /** Resolve a root-scope hash to { entry, subpath }: an exact route first,
      *  then the longest prefix route that owns it, then "#/". The subpath is
-     *  "" for an exact route (and for a prefix route's bare base). */
+     *  "" for an exact route (and for a prefix route's bare base). Routes
+     *  outside the active workspace (options.scope) never match. */
     function match(key) {
         const exact = routes.get(key);
-        if (exact && !exact.prefix) return { entry: exact, subpath: "" };
+        if (exact && !exact.prefix && !exact.open && inScope(exact)) return { entry: exact, subpath: "" };
         let best = null, bestLen = -1;
         for (const [base, entry] of routes) {
-            if (!entry.prefix || base.length <= bestLen) continue;
+            if (!entry.prefix || entry.open || base.length <= bestLen || !inScope(entry)) continue;
             if (key === base || key.startsWith(base.endsWith("/") ? base : base + "/")) {
                 best = { entry, subpath: decode(key.slice(base.length).replace(/^\/+/, "")) };
                 bestLen = base.length;
@@ -109,13 +154,20 @@
     sac.router = {
         register(hash, tagName, options = {}) {
             // "#/files/*" → base "#/files", flagged as a prefix route.
-            const prefix = /\/\*$/.test(hash);
-            if (prefix) hash = hash.slice(0, -2) || "#/";
+            const k = keyOf(hash);
+            const prefix = k.prefix;
+            hash = k.key;
             routes.set(hash, {
                 tag: tagName || null,
                 label: options.label || tagName || hash,
                 icon:  options.icon  || null,
                 palette: options.palette === undefined ? null : options.palette,
+                scope: options.scope === "root" || options.scope === "scoped" ? options.scope : "any",
+                open: typeof options.open === "function" ? options.open : null,
+                // nav: false — the route matches and mounts like any other,
+                // but sac-nav leaves it out of its panel (a host that lists it
+                // its own way, e.g. a workspace's page apps as panel rows).
+                nav: options.nav !== false,
                 prefix,
             });
             // Notify listeners (e.g. <sac-nav>) that the route table changed.
@@ -132,11 +184,33 @@
                 render();
             }
         },
-        // Every route as { hash, tag, label, icon, palette, prefix }. A prefix
-        // route lists under its base hash ("#/files"), so a link to it lands
-        // on the prefix itself.
+        // Drop a route — the hash as registered ("#/files/*" or "#/files").
+        // Fires sac:route-unregistered; a view it had mounted gives way to
+        // whatever owns the address now. → true when there was such a route.
+        unregister(hash) {
+            const { key } = keyOf(hash);
+            const entry = routes.get(key);
+            if (!entry) return false;
+            routes.delete(key);
+            window.dispatchEvent(new CustomEvent("sac:route-unregistered", {
+                detail: { hash: key, tag: entry.tag, prefix: entry.prefix }
+            }));
+            if (rootElement && mounted && mounted.entry === entry) {
+                mounted = null;
+                render();
+            }
+            return true;
+        },
+        // Every route as { hash, tag, label, icon, palette, scope, open, nav, prefix }.
+        // A prefix route lists under its base hash ("#/files"), so a link to
+        // it lands on the prefix itself. Lists ALL routes — filter with
+        // inScope() for the active workspace.
         routes() {
             return Array.from(routes.entries()).map(([hash, info]) => ({ hash, ...info }));
+        },
+        // true when a route (from routes()) exists in the active workspace.
+        inScope(route) {
+            return inScope(route);
         },
         current() {
             return currentHash();

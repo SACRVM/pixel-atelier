@@ -33,7 +33,9 @@
  *   apps.js was loaded from) — a hosted app runs on the host's kit, same as
  *   same-realm hosting. Fonts and a pinned entry are CORS loads from an
  *   opaque origin: their server must send Access-Control-Allow-Origin
- *   (GitHub Pages sends "*").
+ *   (GitHub Pages sends "*"). An unpinned entry is tried as a CORS load
+ *   first and plainly after — only a CORS-loaded entry's uncaught errors
+ *   arrive with message and stack (see ERRORS).
  *
  *   A host that serves its own harness (a real CSP header, frame-ancestors,
  *   …) sets sac.apps.frameUrl — a URL, or (manifest, granted) → URL. The
@@ -58,8 +60,15 @@
  *   is the host's, drawn in the top window). The FileRef.handle the provider
  *   returns stays HERE, in a per-frame table; the guest gets a random id and
  *   hands it back on the next save(), which then saves without a picker.
- *   Bytes cross as structured-cloned Blob / File. A provider that refuses a
+ *   Bytes cross as structured-cloned Blob / File. Files the host opens the
+ *   app WITH ("Open with" — sac.apps.open(id, params, { files })) cross the
+ *   same way: in mount (launch) and, later, as a "launch" event. A provider that refuses a
  *   save (read-only) throws an Error with code "denied"; the guest sees it.
+ *   Per app: when the host granted files: { provider } (#28), the context
+ *   this bridge serves holds a view bound to that provider alone — the
+ *   page's sac.files is never reached, and a handle id resolves only to a
+ *   handle that provider issued to this frame. context.files.readonly
+ *   crosses in mount (filesReadonly).
  *
  * IMAGES FROM THE HOST
  *   The frame's img-src allows only the entry's folder, blob: and data:. So
@@ -75,6 +84,12 @@
  *   run the real command. Labels are text (the palette writes textContent).
  *   Proxies leave when the app is removed, and while its window is closed.
  *
+ * ERRORS
+ *   The guest reports the app's uncaught exceptions, unhandled rejections and
+ *   a throwing mount() / unmount() as "app-error" messages; they reach the
+ *   host page as sac:app-error (see apps.js — capped and rate-limited there).
+ *   A source outside the entry's folder is dropped, with its line / column.
+ *
  * LIMITS (sac.apps.limits)
  *   maxBytes — one payload: a Blob's size, or a structured-clone size
  *              estimate of any other value, in either direction → "too-large"
@@ -83,7 +98,7 @@
  *   timeout  — see app-guest.js; the host pulses "alive" for slow calls
  *
  * API (used by sac.apps; exposed for hosts that want the harness text):
- *   sac.appBridge.create(opts) → bridge { frame, ready, mount(ctx), dispose(cb) }
+ *   sac.appBridge.create(opts) → bridge { frame, ready, mount(ctx), launch(files), dispose(cb) }
  *   sac.appBridge.harness({ kitUrl, manifest, granted }) → { html, csp }
  */
 (function () {
@@ -94,6 +109,7 @@
     const VERSION = 1;
     const SANDBOX = "allow-scripts allow-forms allow-popups allow-downloads";
     const BOOT_TIMEOUT = 20000;   // hello + entry + define, before the host gives up
+    const ERROR_KINDS = ["error", "rejection", "mount", "unmount"];
     const CODES = ["denied", "not-found", "bad-request", "too-large", "rate-limited", "timeout", "integrity", "network", "internal"];
 
     // The theme seeds (ui.css §2): computed on the host's <html> and replayed
@@ -218,10 +234,15 @@
         const manifest = o.manifest;
         const id = manifest.id;
         const granted = o.granted || { fs: false, files: false, identity: false, connect: [] };
+        const api = o.api || {};
         const appError = o.appError || fallbackError;
         const limits = Object.assign({ timeout: 30000, maxBytes: 64 * 1024 * 1024, rate: 200 }, o.limits || {});
         const token = randomId();
         const integrity = typeof manifest.integrity === "string" && manifest.integrity ? manifest.integrity : "";
+        // The entry's folder (absolute) — an error's source is passed on only
+        // when it lies in there, so no host URL leaks into the report.
+        let entryDir = "";
+        try { entryDir = new URL(".", new URL(manifest.src, document.baseURI)).href; } catch (err) { /* no src */ }
 
         const frame = document.createElement("iframe");
         frame.setAttribute("sandbox", SANDBOX);
@@ -553,11 +574,23 @@
                 return true;
             },
             "close": () => { hostCtx.close(); },
+
+            // A host capability (grant.api): own keys of what the host
+            // granted, nothing reachable through a prototype.
+            "api.call": async ([name, method, callArgs]) => {
+                const own = (o, k) => o && typeof k === "string" && Object.prototype.hasOwnProperty.call(o, k);
+                const cap = own(api, name) ? api[name] : null;
+                const fn = cap && own(cap, method) ? cap[method] : null;
+                if (typeof fn !== "function") throw appError("denied", `the host granted no ${String(name)}.${String(method)}`);
+                try { return await fn(...(Array.isArray(callArgs) ? callArgs : [])); }
+                catch (err) { throw o.apiError ? o.apiError(err) : err; }
+            },
         };
 
         function toWire(err) {
             const message = String((err && err.message) || err || "error").slice(0, 1000);
-            let code = err && CODES.includes(err.code) ? err.code : null;
+            // A host capability's own code (grant.api) passes through as is.
+            let code = err && (err.hostCode || CODES.includes(err.code)) ? err.code : null;
             if (!code) {
                 if (/does not exist|not found|no such/i.test(message)) code = "not-found";
                 else if (/already exists|not JSON-serializable|cannot be stored|invalid|must be|is not a/i.test(message)) code = "bad-request";
@@ -644,6 +677,22 @@
                 case "unmounted":
                     if (unmountAck) unmountAck();
                     break;
+                case "app-error": {
+                    // The app's own failure after boot. Known kinds, plain
+                    // values; sac.apps caps, rate-limits and fires
+                    // sac:app-error.
+                    if (!o.onError || !ERROR_KINDS.includes(d.kind)) return;
+                    const src = typeof d.source === "string" && entryDir && d.source.startsWith(entryDir)
+                        ? d.source : undefined;
+                    o.onError(d.kind, {
+                        message: typeof d.message === "string" ? d.message : "",
+                        stack: typeof d.stack === "string" ? d.stack : undefined,
+                        source: src,
+                        line: src && Number.isFinite(d.line) ? d.line : undefined,
+                        column: src && Number.isFinite(d.column) ? d.column : undefined,
+                    });
+                    break;
+                }
                 default: break;
             }
         }
@@ -684,7 +733,11 @@
                 regional: regionalNow(),
                 identity,
                 filesKind: granted.files && ctx.files ? ctx.files.kind : null,
+                filesReadonly: !!(granted.files && ctx.files && ctx.files.readonly),
+                launch: (ctx.launch && ctx.launch.files || []).map(toGuestRef),
                 granted: jsonSafe(ctx.granted),
+                // Names and method names only — the functions stay here.
+                api: Object.fromEntries(Object.entries(api).map(([n, m]) => [n, Object.keys(m)])),
             });
 
             // Route: host → guest (a rail link, back/forward, a pasted URL).
@@ -805,7 +858,12 @@
         }
         (o.container || document.body).appendChild(frame);
 
-        return { frame, ready, mount, dispose };
+        /** "Open with" on a mounted app: the files as guest refs. */
+        function launch(files) {
+            push("launch", { files: (files || []).map(toGuestRef) });
+        }
+
+        return { frame, ready, mount, launch, dispose };
     }
 
     sac.appBridge = { create, harness, estimateSize };

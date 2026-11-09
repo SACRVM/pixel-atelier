@@ -29,9 +29,12 @@
  *   host → guest  mount { snapshot }        (views: when first shown)
  *   guest → host  call { id, method, args } → result { id, ok, result | error }
  *   host → guest  event { topic, … }        theme lang regional route host
- *                                           identity accent fs progress
+ *                                           identity accent fs progress launch
  *   host → guest  alive { ids }             (a slow call is still running)
  *   host → guest  unmount → guest → host unmounted
+ *   guest → host  app-error { kind, message, stack?, source?, line?, column? }
+ *                 (after boot: an uncaught error, an unhandled rejection, a
+ *                 throwing mount() / unmount() — the host fires sac:app-error)
  * Every message the guest sends after boot carries the token; every message
  * it accepts must come from window.parent (and, after boot, its origin).
  *
@@ -84,7 +87,9 @@
     let identity = null;
     const identitySubs = new Set();
     const fsWatchers = new Set();
+    const launchCbs = new Set();
     let filesKind = null;
+    let filesReadonly = false;
     let hostObj = null;
     let declared = new Set();
     let hostUrls = [];              // object URLs made for host toolbar avatars
@@ -99,6 +104,38 @@
     function post(msg) {
         window.parent.postMessage(Object.assign({ sac: ENVELOPE, v: VERSION, token }, msg), hostOrigin);
     }
+
+    /** The app broke: tell the host (it caps and rate-limits; this side
+     *  only trims, so one report stays small). */
+    function report(kind, info) {
+        if (!booted) return;
+        const i = info instanceof Error ? { message: info.message, stack: info.stack }
+            : (info && typeof info === "object" ? info : { message: String(info) });
+        const msg = { type: "app-error", kind, message: String(i.message || "").slice(0, 1000) };
+        if (typeof i.stack === "string") msg.stack = i.stack.slice(0, 4000);
+        if (typeof i.source === "string" && i.source) {
+            msg.source = i.source.slice(0, 2000);
+            if (Number.isFinite(i.line)) msg.line = i.line;
+            if (Number.isFinite(i.column)) msg.column = i.column;
+        }
+        try { post(msg); } catch (err) { /* nothing left to tell */ }
+    }
+
+    window.addEventListener("error", (e) => {
+        // A failing <script> / <img> fires here too, without an ErrorEvent:
+        // only real exceptions are the app's errors.
+        if (!(e instanceof ErrorEvent)) return;
+        const err = e.error;
+        report("error", {
+            message: e.message || (err && err.message) || "",
+            stack: err && typeof err.stack === "string" ? err.stack : undefined,
+            source: e.filename, line: e.lineno, column: e.colno,
+        });
+    });
+    window.addEventListener("unhandledrejection", (e) => {
+        const r = e.reason;
+        report("rejection", r instanceof Error ? r : { message: String(r) });
+    });
 
     function appError(code, message) {
         const err = new Error(message);
@@ -483,6 +520,7 @@
                 progress ? { onProgress: opts.onProgress } : undefined);
         },
         get kind() { return filesKind; },
+        get readonly() { return filesReadonly; },
     };
 
     function buildContext(d) {
@@ -505,9 +543,28 @@
             } : null,
             setDirty(flag) { fire("setDirty", [!!flag]); },
             close() { fire("close", []); },
-            granted: Object.assign({}, granted, { connect: (granted.connect || []).slice() }),
+            launch: { files: Array.isArray(d.launch) ? d.launch : [] },
+            onLaunch(cb) {
+                if (typeof cb !== "function") return () => {};
+                launchCbs.add(cb);
+                return () => launchCbs.delete(cb);
+            },
+            granted: Object.assign({}, granted, {
+                connect: (granted.connect || []).slice(),
+                api: (granted.api || []).slice(),
+            }),
             isolated: true,
         };
+        // The host's own capabilities (grant.api): each method a call over
+        // the bridge — the host runs it and answers.
+        Object.entries(d.api || {}).forEach(([name, methods]) => {
+            if (!Array.isArray(methods) || Object.prototype.hasOwnProperty.call(ctx, name)) return;
+            const cap = {};
+            methods.forEach((m) => {
+                if (typeof m === "string") cap[m] = (...args) => call("api.call", [name, m, args]);
+            });
+            ctx[name] = Object.freeze(cap);
+        });
 
         if (d.kind !== "view") {
             ctx.deepLink = {
@@ -562,6 +619,7 @@
         if (appEl) return;
         identity = identityFrom(d.identity);
         filesKind = d.filesKind || null;
+        filesReadonly = d.filesReadonly === true;
         accentSeed = d.accent || null;
         applyTheme(d.theme);
         applyLang(d.lang);
@@ -576,7 +634,10 @@
             document.body.appendChild(appEl);
             if (typeof appEl.mount === "function") {
                 try { appEl.mount(ctx); }
-                catch (err) { console.error(`[sac.apps] ${ctx.appId}.mount() threw:`, err); }
+                catch (err) {
+                    console.error(`[sac.apps] ${ctx.appId}.mount() threw:`, err);
+                    report("mount", err);
+                }
             }
             mounted = true;
             syncCommands();
@@ -586,9 +647,19 @@
     function loadEntry(entry) {
         entryTag = entry.tag;
         if (customElements.get(entry.tag)) { post({ type: "ready" }); return; }
+        // A CORS load first: only then does the browser hand over an
+        // uncaught error's message and stack (else "Script error.") and fire
+        // unhandledrejection for it. A server without CORS gets a second,
+        // plain try; a pinned entry is CORS by necessity.
+        inject(entry, true);
+    }
+
+    function inject(entry, cors) {
         const s = document.createElement("script");
         if (entry.integrity) {
             s.integrity = entry.integrity;
+            s.crossOrigin = "anonymous";
+        } else if (cors) {
             s.crossOrigin = "anonymous";
         }
         s.src = entry.src;
@@ -605,7 +676,11 @@
                 post({ type: "load-error", reason: "undefined" });
             }, DEFINE_TIMEOUT);
         };
-        s.onerror = () => post({ type: "load-error", reason: "script" });
+        s.onerror = () => {
+            s.remove();
+            if (cors && !entry.integrity) inject(entry, false);
+            else post({ type: "load-error", reason: "script" });
+        };
         document.head.appendChild(s);
     }
 
@@ -630,6 +705,14 @@
                 break;
             }
             case "command":  runCommand(d.id); break;
+            case "launch": {
+                const files = Array.isArray(d.files) ? d.files : [];
+                launchCbs.forEach((cb) => {
+                    try { cb({ files: files.slice() }); }
+                    catch (err) { console.error("[sac.apps] onLaunch handler threw:", err); }
+                });
+                break;
+            }
             case "identity":
                 identity = identityFrom(d.profile);
                 identitySubs.forEach((cb) => {
@@ -684,7 +767,10 @@
             case "unmount":
                 if (appEl && typeof appEl.unmount === "function") {
                     try { appEl.unmount(); }
-                    catch (err) { console.error("[sac.apps] unmount() threw:", err); }
+                    catch (err) {
+                        console.error("[sac.apps] unmount() threw:", err);
+                        report("unmount", err);
+                    }
                 }
                 hostUrls.forEach((u) => URL.revokeObjectURL(u));
                 hostUrls = [];

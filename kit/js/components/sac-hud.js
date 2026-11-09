@@ -59,6 +59,15 @@ class SacHud extends HTMLElement {
                     pointer-events: none;
                     z-index: 10;
                 }
+                /* Reduced transparency / more contrast: solid (the glass
+                   hue, nothing shining through), no blur; under more
+                   contrast a clearly visible edge. */
+                @media (prefers-reduced-transparency: reduce) {
+                    :host { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
+                }
+                @media (prefers-contrast: more) {
+                    :host { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; border-color: var(--border-contrast); }
+                }
             </style>
             <slot></slot>
         `;

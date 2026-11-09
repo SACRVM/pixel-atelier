@@ -24,7 +24,7 @@
  *   step        — minutes the arrows / wheel step the minute segment by
  *                 (default 1; 5, 15 …). Typed minutes are not snapped.
  *   min / max   — "HH:MM" bounds, inclusive. A time outside them shows
- *                 --danger and never commits (focus leaving reverts it).
+ *                 --danger and never commits ("No later than 18:00").
  *   label       — text above the field, kit form-label styling; also the
  *                 group's accessible name.
  *   placeholder — "hh:mm"-style: the part before and after the ":" is shown
@@ -33,11 +33,15 @@
  *   size        — "compact" (default, sac-date-field's compact row) or
  *                 "regular" (the metrics of a plain kit <input>, the UI font
  *                 with tabular digits) — set the same size on a date + time
- *                 pair. Touch sizing is the same for both.
+ *                 pair. Touch sizing is the same for both. "cell" = the
+ *                 cell-editor contract (borderless, fills its container, no
+ *                 label, only the hour segment in the tab order; Enter /
+ *                 Escape / Tab per style guide → Cell editors).
  *
  * Properties:
  *   value — get/set, normalized "HH:MM" or "". Setting is programmatic:
  *           the segments update in place, NO event fires.
+ *   focus() — focuses the hour segment.
  *
  * Events:
  *   sac:change — detail { value } — "HH:MM", or "" when the user cleared it.
@@ -45,6 +49,7 @@
  *                field, or Enter. Stepping and typing inside the field
  *                update the segments live but fire once, on commit — the
  *                same contract as <sac-date-field>. Bubbles, not composed.
+ *   sac:commit / sac:cancel — size="cell" only (style guide → Cell editors).
  *
  * Keyboard (on a segment):
  *   ↑ / ↓        step the segment (wraps; minutes by `step`); on an empty
@@ -56,6 +61,19 @@
  *   Backspace / Delete  clear the segment (the value becomes "").
  *   Enter        commit.   Escape  revert to the last committed value.
  *
+ * Invalid entry (style guide → CSS Patterns → Field errors): a time outside
+ * min / max shows --danger while typing, and the segments get
+ * aria-invalid="true". Committing (Enter, focus leaving) a time outside the
+ * bounds or half a time shows a line under the field that says what is
+ * expected — "No earlier than 08:00", "No later than 06:00 PM" (in the
+ * field's hour cycle), "Enter hours and minutes" — wired with
+ * aria-describedby and announced politely. The segments and the line STAY
+ * (before 2.36 they silently reverted): `value` keeps the last valid time
+ * and no sac:change fires. Correcting the segments clears it, Escape goes
+ * back to the last valid time, a programmatic value set replaces it.
+ * size="cell" sets aria-invalid only — no line, and the commit still
+ * reverts (the host grid owns commit and cancel there).
+ *
  * Mouse: the wheel steps the segment under the pointer while the field has
  * focus (a field you merely scroll past never changes). Clicking AM/PM
  * toggles it.
@@ -66,7 +84,8 @@
  * are at least 44px wide, and type is 16px (no iOS focus zoom). Nothing is
  * hover-only.
  *
- * CSS parts: label, field (the bordered box), segment (each segment), separator.
+ * CSS parts: label, field (the bordered box), segment (each segment),
+ * separator, error (the message line).
  */
 (function () {
 
@@ -74,6 +93,26 @@
         (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
 
     const pad = (n) => String(n).padStart(2, "0");
+
+    /* The blur of a click elsewhere fires on pointer-down. A message line
+       shown right then grows the field and can pull the click's target (a
+       Save button below) out from under the pointer before pointer-up —
+       the click is lost. So while a pointer is down, the line waits until
+       that click has landed. */
+    let pressed = false;
+    document.addEventListener("pointerdown", () => { pressed = true; }, true);
+    document.addEventListener("pointerup", () => { pressed = false; }, true);
+    document.addEventListener("pointercancel", () => { pressed = false; }, true);
+    function whenReleased(fn) {
+        if (!pressed) { fn(); return; }
+        const go = () => {
+            document.removeEventListener("pointerup", go, true);
+            document.removeEventListener("pointercancel", go, true);
+            setTimeout(fn, 0);                 // after the click that follows pointer-up
+        };
+        document.addEventListener("pointerup", go, true);
+        document.addEventListener("pointercancel", go, true);
+    }
 
     /** "9:5" / "09:05" → {h, m} or null. */
     function parse(str) {
@@ -93,7 +132,7 @@
 
 class SacTimeField extends HTMLElement {
     static get observedAttributes() {
-        return ["value", "hour-cycle", "step", "min", "max", "label", "placeholder", "disabled"];
+        return ["value", "hour-cycle", "step", "min", "max", "label", "placeholder", "disabled", "size"];
     }
 
     constructor() {
@@ -104,6 +143,9 @@ class SacTimeField extends HTMLElement {
         this._m = null;              // 0–59
         this._buffer = "";           // digits typed into the focused segment
         this._reflecting = false;
+        this._snapshot = "";         // value when focus entered (size="cell" cancel)
+        this._inside = false;
+        this._errorShown = false;    // the message line is up (form mode)
     }
 
     connectedCallback() {
@@ -137,14 +179,26 @@ class SacTimeField extends HTMLElement {
             case "label":       this._syncLabel(); break;
             case "placeholder": this._syncSegments(); break;
             case "disabled":    this._syncDisabled(); break;
+            case "size":        this._syncDisabled(); break;
         }
     }
 
     get value() { return this._value; }
     set value(v) { this.setAttribute("value", v == null ? "" : String(v)); }
+    /** "" while the segments can commit, else the words the line under the
+     *  field shows. `value` keeps the last valid time meanwhile — a form
+     *  holds its Save on this. */
+    get validationMessage() { return this._judge() || ""; }
 
     get disabled() { return this.hasAttribute("disabled"); }
     set disabled(v) { this.toggleAttribute("disabled", !!v); }
+
+    focus(opts) {
+        if (!this._segs) return super.focus(opts);
+        this._segs.h.focus(opts);
+    }
+
+    _cell() { return this.getAttribute("size") === "cell"; }
 
     /* ------------------------------------------------------------- state */
 
@@ -206,13 +260,51 @@ class SacTimeField extends HTMLElement {
         this._setCommitted(v);
     }
 
-    /** Commit the live segments: a user change, so an event when it moved. */
+    /** "HH:MM" as this field shows it (its hour cycle). */
+    _show(hhmm) {
+        const r = window.sac && sac.regional && sac.regional.formatTime;
+        return r ? sac.regional.formatTime(hhmm, { hourCycle: this._h12() ? "h12" : "h23" }) : hhmm;
+    }
+
+    /** The live segments judged: null when they can commit, else the
+     *  message saying what is expected. */
+    _judge() {
+        const v = this._live();
+        if (v === "" && (this._h != null || this._m != null)) {
+            return t("time-field.error-incomplete", "Enter hours and minutes");
+        }
+        if (v && !this._inRange(v)) {
+            const min = normalize(this.getAttribute("min"));
+            if (min && v < min) return t("time-field.error-min", "No earlier than {min}").replace("{min}", () => this._show(min));
+            const max = normalize(this.getAttribute("max"));
+            return t("time-field.error-max", "No later than {max}").replace("{max}", () => this._show(max));
+        }
+        return null;
+    }
+
+    /** The message line — form mode only; null clears it. */
+    _showError(msg) {
+        const text = msg && !this._cell() ? String(msg) : "";
+        this._errorShown = !!text;
+        if (this._errorEl && this._errorEl.textContent !== text) this._errorEl.textContent = text;
+    }
+
+    /** Commit the live segments: a user change, so an event when it moved.
+     *  Half a time or one out of bounds never commits: in form mode the
+     *  segments stay and the message line says what is expected; under
+     *  size="cell" they revert (the host grid owns commit and cancel). */
     _commit() {
         this._buffer = "";
         const v = this._live();
-        const partial = v === "" && (this._h != null || this._m != null);
-        if (partial || (v && !this._inRange(v))) {   // half a time, or out of bounds → back
-            this._setCommitted(this._value);
+        const err = this._judge();
+        if (err) {
+            if (this._cell()) { this._setCommitted(this._value); return; }
+            whenReleased(() => {                     // judged again: the click may have fixed it
+                const now = this._judge();
+                if (!now) return;
+                this._showError(now);
+                this._syncSegments();                // the invalid look, now for half a time too
+            });
             return;
         }
         if (v === this._value) { this._syncSegments(); return; }
@@ -303,6 +395,20 @@ class SacTimeField extends HTMLElement {
                 .seg.period[hidden] { display: none; }
                 .sep { color: var(--text-muted); padding: 0 1px; }
 
+                /* The field-error line (ui.css .field-error, re-stated):
+                   always in the tree so the polite live region announces,
+                   empty — and so nothing — while the time is valid. It
+                   wraps inside the field's width instead of widening it
+                   (contain: inline-size). */
+                .error {
+                    contain: inline-size;
+                    font-size: 0.75rem;
+                    line-height: 1.35;
+                    color: var(--danger-text);
+                }
+                .error:not(:empty) { margin-top: 0.3rem; }
+                :host([size="regular"]) .error { font-size: 0.8rem; }
+
                 /* size="regular": the plain kit <input> metrics, as in
                    sac-date-field's regular size. */
                 :host([size="regular"]) .row { min-height: 0; }
@@ -318,21 +424,54 @@ class SacTimeField extends HTMLElement {
                     .field, :host([size="regular"]) .field { min-height: 44px; font-size: max(16px, 1rem); padding: 0 0.25rem; }
                     .seg { min-width: 44px; min-height: 40px; }
                 }
+                /* size="cell" — the cell-editor contract: borderless, fills
+                   the cell, the cell's font, no label, no own focus ring. */
+                :host([size="cell"]) {
+                    display: block;
+                    width: 100%;
+                    height: 100%;
+                    font: inherit;
+                    color: inherit;
+                }
+                :host([size="cell"]) .label,
+                :host([size="cell"]) .error { display: none; }
+                :host([size="cell"]) .row { height: 100%; min-height: 0; }
+                :host([size="cell"]) .field,
+                :host([size="cell"]) .field:hover,
+                :host([size="cell"]) .field:focus-within {
+                    width: 100%;
+                    height: 100%;
+                    min-height: 0;
+                    padding: 0 var(--cell-padding-inline, 8px);
+                    font: inherit;
+                    color: inherit;
+                    background: transparent;
+                    border: 0;
+                    border-radius: 0;
+                    box-shadow: none;
+                }
+                :host([size="cell"]) .seg { width: 2.4ch; min-width: 0; min-height: 0; }
+                :host([size="cell"]) .seg.period { width: 3.2ch; }
+                @media (pointer: coarse) {
+                    :host([size="cell"]) .field { font-size: max(16px, 1em); }
+                }
                 @media (prefers-reduced-motion: reduce) { .field { transition: none; } }
             </style>
             <label class="label" part="label" hidden></label>
             <div class="row"><div class="field" part="field" role="group">
                 <input class="seg hour" part="segment" data-seg="h" type="text" inputmode="numeric"
-                       autocomplete="off" spellcheck="false" role="spinbutton" maxlength="4">
+                       autocomplete="off" spellcheck="false" role="spinbutton" maxlength="4" aria-describedby="error">
                 <span class="sep" part="separator" aria-hidden="true">:</span>
                 <input class="seg minute" part="segment" data-seg="m" type="text" inputmode="numeric"
-                       autocomplete="off" spellcheck="false" role="spinbutton" maxlength="4">
+                       autocomplete="off" spellcheck="false" role="spinbutton" maxlength="4" aria-describedby="error">
                 <input class="seg period" part="segment" data-seg="p" type="text" inputmode="text"
-                       autocomplete="off" spellcheck="false" role="spinbutton" maxlength="4" hidden readonly>
+                       autocomplete="off" spellcheck="false" role="spinbutton" maxlength="4" hidden readonly aria-describedby="error">
             </div></div>
+            <div class="error" part="error" id="error" aria-live="polite"></div>
         `;
         this._labelEl = this.shadowRoot.querySelector(".label");
         this._field = this.shadowRoot.querySelector(".field");
+        this._errorEl = this.shadowRoot.getElementById("error");
         this._segs = {
             h: this.shadowRoot.querySelector(".hour"),
             m: this.shadowRoot.querySelector(".minute"),
@@ -377,6 +516,15 @@ class SacTimeField extends HTMLElement {
             if (e.relatedTarget && this.shadowRoot.contains(e.relatedTarget)) return;
             this._commit();
         });
+        // Cell contract: remember the value focus arrived with.
+        this.addEventListener("focusin", () => {
+            if (this._inside) return;
+            this._inside = true;
+            this._snapshot = this._value;
+        });
+        this.addEventListener("focusout", (e) => {
+            if (e.relatedTarget !== this) this._inside = false;
+        });
     }
 
     _select(el) {
@@ -401,6 +549,24 @@ class SacTimeField extends HTMLElement {
 
     _onKeydown(e, key) {
         if (this.disabled) return;
+        if (this._cell() && (e.key === "Enter" || e.key === "Escape" || e.key === "Tab")) {
+            if (e.key === "Tab") { this._commit(); return; }        // never swallowed
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key === "Enter") {
+                this._commit();
+                this.dispatchEvent(new CustomEvent("sac:commit", {
+                    detail: { value: this._value, shiftKey: e.shiftKey }, bubbles: true, composed: true,
+                }));
+            } else {
+                this._buffer = "";
+                this._setCommitted(this._snapshot);
+                this.dispatchEvent(new CustomEvent("sac:cancel", {
+                    detail: { value: this._value }, bubbles: true, composed: true,
+                }));
+            }
+            return;
+        }
         switch (e.key) {
             case "ArrowUp":    e.preventDefault(); this._stepSeg(key, 1); break;
             case "ArrowDown":  e.preventDefault(); this._stepSeg(key, -1); break;
@@ -417,10 +583,15 @@ class SacTimeField extends HTMLElement {
                 e.preventDefault();
                 this._commit();
                 break;
-            case "Escape":
-                if (this._live() !== this._value || this._buffer) { e.preventDefault(); e.stopPropagation(); }
+            case "Escape": {
+                const partial = (this._h == null) !== (this._m == null);
+                if (this._live() !== this._value || this._buffer || partial || this._errorShown) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
                 this._revert();
                 break;
+            }
             case "a": case "A": case "p": case "P":
                 if (this._h12()) { e.preventDefault(); this._setPeriod(e.key.toLowerCase() === "p"); }
                 break;
@@ -536,8 +707,18 @@ class SacTimeField extends HTMLElement {
         now(sm, this._m, minText);
         now(sp, this._h == null ? null : (pm ? 1 : 0), sp.value);
 
-        const live = this._live();
-        this._field.classList.toggle("invalid", !!live && !this._inRange(live));
+        // Out of bounds shows live while typing; half a time only once a
+        // commit was refused (every time is half a time mid-typing). A
+        // message already showing follows the segments, and goes once they
+        // are valid.
+        const err = this._judge();
+        const bad = !!err && (!!this._live() || this._errorShown);
+        this._field.classList.toggle("invalid", bad);
+        for (const el of [sh, sm, sp]) {
+            if (bad) el.setAttribute("aria-invalid", "true");
+            else el.removeAttribute("aria-invalid");
+        }
+        if (this._errorShown) this._showError(err);
     }
 
     _syncCycle() {
@@ -563,7 +744,13 @@ class SacTimeField extends HTMLElement {
 
     _syncDisabled() {
         const off = this.disabled;
-        for (const el of Object.values(this._segs)) el.disabled = off;
+        const cell = this._cell();
+        for (const [key, el] of Object.entries(this._segs)) {
+            el.disabled = off;
+            // Cell editors: Tab leaves the field; ← / → still reach every segment.
+            if (cell && key !== "h") el.tabIndex = -1;
+            else el.removeAttribute("tabindex");
+        }
     }
 }
 

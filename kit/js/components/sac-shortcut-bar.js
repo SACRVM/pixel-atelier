@@ -50,6 +50,10 @@
  *   nav   — which <sac-nav> the bar folds into on compact: a CSS selector,
  *           or "none" to never fold. Absent = the first <sac-nav> in the
  *           bar's document (or shadow root).
+ *   fit   — "labels": when the items do not fit one row, the items that
+ *           have an icon drop their label first (key cap + icon, the label
+ *           stays the tooltip and accessible name); only what still does
+ *           not fit goes into "…". Absent = straight into "…".
  *   folded — reflected, read-only: present while the bar's items live in
  *           the nav's "…" menu (the bar itself is hidden).
  *   shift  — reflected, read-only: present while the Shift layer is up.
@@ -67,11 +71,13 @@
  * Language: key caps and function labels re-render in place on a
  * sac.lang switch.
  *
+ * One row at every width: the items that do not fit fold, from the end,
+ * into a trailing "…" menu (<sac-menu>, needs it loaded) — same labels,
+ * icons and key caps, Shift layer included; their hotkeys stay registered.
  * Compact (≤768px, the kit's `compact` query): the bar hides and its items
  * join the nav's "…" menu as one group (sac-nav setOverflowGroup) — Shift
  * variants with a shiftAction as entries of their own, since a phone has no
- * Shift key. Without a nav (or nav="none") the bar stays and wraps.
- * Desktop: items wrap onto further rows when they do not fit one.
+ * Shift key. Without a nav (or nav="none") the bar stays, with its own "…".
  * Touch: (pointer: coarse) makes every button 44px tall.
  */
 (function () {
@@ -127,7 +133,7 @@
     }
 
 class SacShortcutBar extends HTMLElement {
-    static get observedAttributes() { return ["group", "nav"]; }
+    static get observedAttributes() { return ["group", "nav", "fit"]; }
 
     constructor() {
         super();
@@ -172,6 +178,13 @@ class SacShortcutBar extends HTMLElement {
         this._mqHandler = () => this._syncFold();
         this._mq.addEventListener("change", this._mqHandler);
         this._syncFold();
+        // One row: re-fit whenever the bar's width changes, and once the
+        // fonts are in (a label's width depends on them).
+        if (!this._ro) this._ro = new ResizeObserver(() => this._layout());
+        this._ro.observe(this);
+        document.fonts?.ready.then(() => this._layout());
+        // The "…" needs sac-menu, which may define after the bar.
+        if (!customElements.get("sac-menu")) customElements.whenDefined("sac-menu").then(() => this._layout());
         // The nav may upgrade after the bar (script order, markup order).
         if (!customElements.get("sac-nav")) customElements.whenDefined("sac-nav").then(() => this._syncFold());
         if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
@@ -185,6 +198,7 @@ class SacShortcutBar extends HTMLElement {
         document.removeEventListener("visibilitychange", this._onVisibility);
         this.removeEventListener("pointermove", this._onPointer);
         this._mq?.removeEventListener("change", this._mqHandler);
+        this._ro?.disconnect();
         this._unfold();
         this._shift = false;
         if (this._offLang) { this._offLang(); this._offLang = null; }
@@ -194,6 +208,7 @@ class SacShortcutBar extends HTMLElement {
         if (!this.isConnected) return;
         if (name === "group" && this._group === undefined) this._register();
         if (name === "nav") { this._unfold(); this._syncFold(); }
+        if (name === "fit") this._layout();
     }
 
     /* ------------------------------------------------------- registry */
@@ -238,13 +253,27 @@ class SacShortcutBar extends HTMLElement {
             <style>
                 :host { display: block; }
                 :host([hidden]), :host([folded]) { display: none; }
+                /* One row: what does not fit folds into "…" (_layout). The
+                   2px pad keeps the focus ring inside the clip. */
                 .bar {
                     display: flex;
-                    flex-wrap: wrap;
+                    flex-wrap: nowrap;
                     align-items: center;
                     gap: 6px;
+                    overflow: hidden;
+                    padding: 2px;
+                    margin: -2px;
                 }
                 .bar:empty { display: none; }
+                .item[hidden], .more[hidden] { display: none; }
+                .item { flex: none; }
+                /* fit="labels": icon items show key cap + icon only. */
+                .bar.icons .item.has-icon .label { display: none; }
+                .bar.icons .item.has-icon { padding-right: 8px; }
+                .more { flex: none; }
+                .more-btn { padding: 0 8px; }
+                /* "…" entries: label, then the key cap at the right edge. */
+                .more button[data-action] kbd { margin-left: auto; padding-left: 5px; }
                 /* The kit's .toolbar .btn recipe, re-stated for the shadow
                    root, with the key cap leading. */
                 .item {
@@ -265,11 +294,18 @@ class SacShortcutBar extends HTMLElement {
                     letter-spacing: 0.02em;
                     white-space: nowrap;
                     cursor: pointer;
-                    transition: background 0.2s ease, border-color 0.2s ease;
+                    transition: background 0.2s ease, border-color 0.2s ease,
+                                transform 0.2s var(--ease-smooth);
                 }
                 .item:hover:not(:disabled) {
                     background: var(--hover);
                     border-color: var(--accent);
+                }
+                /* Press: the button gives the moment it goes down — fast in
+                   (100ms), back at the normal pace. The "…" trigger too. */
+                .item:active:not(:disabled) {
+                    transform: scale(0.97);
+                    transition-duration: 0.1s;
                 }
                 .item:focus-visible {
                     outline: 2px solid var(--accent);
@@ -305,11 +341,23 @@ class SacShortcutBar extends HTMLElement {
         `;
         const bar = this.shadowRoot.querySelector(".bar");
         bar.addEventListener("click", (e) => {
-            const btn = e.target.closest("button.item");
+            const btn = e.target.closest("button.item:not(.more-btn)");
             if (!btn || btn.disabled) return;
             const item = this._items[Number(btn.dataset.index)];
             if (item) this._invoke(item, e.shiftKey, e, "click");
         });
+        // The "…": a <sac-menu> whose trigger wears the item recipe.
+        const more = document.createElement("sac-menu");
+        more.className = "more";
+        more.hidden = true;
+        more.innerHTML = `<button slot="trigger" class="item more-btn" type="button"><sac-icon name="more"></sac-icon></button>`;
+        // The menu's own event stays in here: the bar answers with sac:invoke.
+        more.addEventListener("sac:select", (e) => {
+            e.stopPropagation();
+            const item = this._items[Number(e.detail && e.detail.action)];
+            if (item) this._invoke(item, this._shift, e, "menu");
+        });
+        this._more = more;
         this._renderItems();
     }
 
@@ -320,7 +368,7 @@ class SacShortcutBar extends HTMLElement {
         this._items.forEach((item, i) => {
             const b = document.createElement("button");
             b.type = "button";
-            b.className = "item";
+            b.className = item.icon ? "item has-icon" : "item";
             b.setAttribute("part", "item");
             b.dataset.index = String(i);
             if (item.id != null) b.dataset.id = String(item.id);
@@ -337,6 +385,7 @@ class SacShortcutBar extends HTMLElement {
             b.appendChild(label);
             bar.appendChild(b);
         });
+        bar.appendChild(this._more);
         this._relabel();
     }
 
@@ -357,16 +406,83 @@ class SacShortcutBar extends HTMLElement {
                 b.querySelector(".label").textContent = label;
                 b.querySelector("kbd").textContent = combo ? fmt(combo) : "";
                 b.classList.toggle("shifted", !!(swapLabel || swapKey));
+                // The name a screen reader reads, also with the label hidden.
+                b.setAttribute("aria-label", label);
                 if (combo) {
                     b.setAttribute("aria-keyshortcuts", ariaKeys(combo));
                     b.title = `${label} (${fmt(combo)})`;
                 } else {
                     b.removeAttribute("aria-keyshortcuts");
-                    b.removeAttribute("title");
+                    b.title = label;
                 }
             });
+            const more = this._more && this._more.querySelector(".more-btn");
+            if (more) {
+                const m = t("shortcutbar.more", "More");
+                more.setAttribute("aria-label", m);
+                more.title = m;
+            }
         }
+        // A new language changes widths; the Shift layer must not make the
+        // row jump, so it only refreshes the "…" entries.
+        if (menu) this._layout();
+        else this._fillMore();
         if (menu && this._nav) this._nav.setOverflowGroup(this, this._menuEntries());
+    }
+
+    /* ------------------------------------------------------- one row */
+
+    /** Fit one row: all items in, then (fit="labels") icon items without
+     *  labels, then fold items from the end into "…" until the row fits. */
+    _layout() {
+        const bar = this.shadowRoot.querySelector(".bar");
+        const more = this._more;
+        if (!bar || !more || !this.isConnected || this.hasAttribute("folded")) return;
+        const buttons = [...bar.querySelectorAll("button.item:not(.more-btn)")];
+        buttons.forEach((b) => { b.hidden = false; });
+        bar.classList.remove("icons");
+        more.hidden = true;
+        this._over = [];
+        if (!bar.clientWidth) { this._fillMore(); return; }   // not laid out
+        const fits = () => bar.scrollWidth <= bar.clientWidth + 1;
+        if (!fits() && this.getAttribute("fit") === "labels") bar.classList.add("icons");
+        if (!fits() && customElements.get("sac-menu")) {
+            more.hidden = false;
+            for (let i = buttons.length - 1; i >= 0 && !fits(); i--) {
+                buttons[i].hidden = true;
+                this._over.unshift(Number(buttons[i].dataset.index));
+            }
+        }
+        this._fillMore();
+    }
+
+    /** The "…" entries for the folded items, in the bar's current Shift
+     *  state: icon, label, key cap. */
+    _fillMore() {
+        const more = this._more;
+        if (!more) return;
+        more.querySelectorAll("button[data-action]").forEach((n) => n.remove());
+        (this._over || []).forEach((i) => {
+            const item = this._items[i];
+            if (!item) return;
+            const b = document.createElement("button");
+            b.type = "button";
+            b.dataset.action = String(i);
+            if (item.disabled) b.disabled = true;
+            if (item.icon) {
+                const ic = document.createElement("sac-icon");
+                ic.setAttribute("name", item.icon);
+                b.appendChild(ic);
+            }
+            const swapKey = this._shift && item.combo && typeof item.shiftAction === "function" && !hasShift(item.combo);
+            b.appendChild(document.createTextNode((this._shift && text(item.shiftLabel)) || text(item.label)));
+            if (item.combo) {
+                const k = document.createElement("kbd");
+                k.textContent = fmt(swapKey ? "shift+" + item.combo : item.combo);
+                b.appendChild(k);
+            }
+            more.appendChild(b);
+        });
     }
 
     _setShift(on) {

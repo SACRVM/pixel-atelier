@@ -35,8 +35,12 @@
  *   add(message, { kind, duration, title, action })
  *              kind:     "info" (default) | "success" | "warn" | "error"
  *                        → --accent / --ok / --accent-warm / --danger
- *              duration: ms until auto-dismiss (default 4000, or 8000 when
- *                        the toast has an action; 0 = sticky)
+ *              duration: ms until auto-dismiss; 0 = sticky. Default by
+ *                        what the toast asks of the reader: kind "error"
+ *                        10000, kind "warn" 8000, any toast with an action
+ *                        8000, everything else 4000 (2.36.0 — errors and
+ *                        warnings used to share the 4000). An explicit
+ *                        duration always wins.
  *              title:    optional bold line above the message
  *              action:   optional { label, labelKey, onClick, dismissOnClick }
  *                        — a text button between the message and the ×.
@@ -63,11 +67,13 @@
  *     so a message you reached for never vanishes mid-read.
  *   - Messages and titles are written with textContent, never innerHTML —
  *     toast strings routinely come from errors, files and users.
- *   - A toast with an action also pauses while focus is inside it, and Escape
- *     there dismisses it; focus it held returns to where it came from. The
- *     button sits in the card, inside the polite live region, so its label
- *     is read with the message ("Moved 3 files to the trash, Undo"). Tab
- *     reaches it in document order (the stack is the last child of body).
+ *   - Every toast also pauses while keyboard focus is inside it (its action
+ *     or its ×), and Escape there dismisses it; focus it held returns to
+ *     where it came from (2.36.0 — this used to apply to action toasts
+ *     only). An action button sits in the card, inside the polite live
+ *     region, so its label is read with the message ("Moved 3 files to the
+ *     trash, Undo"). Tab reaches the card in document order (the stack is
+ *     the last child of body).
  *   - The stack itself is pointer-events: none and stays in the DOM; only the
  *     cards are interactive.
  *
@@ -193,36 +199,38 @@ class SacToastStack extends HTMLElement {
         card.appendChild(close);
 
         // Timer bookkeeping lives on the card so every handler below (and the
-        // caller's .dismiss()) works off one source of truth. An action needs
-        // time to be read, decided on and reached — hence the longer default.
-        if (duration === undefined) duration = act ? 8000 : 4000;
+        // caller's .dismiss()) works off one source of truth. The default
+        // grows with what the toast asks of the reader: an action needs time
+        // to be read, decided on and reached (8 s), a warning 8 s, an error —
+        // the one most likely to be read twice — 10 s. An explicit duration
+        // always wins.
+        if (duration === undefined) duration = SacToastStack.defaultDuration(k, !!act);
         card._duration = Number(duration) || 0;
         card._timer = null;
         card.closed = new Promise((resolve) => { card._resolve = resolve; });
         card.dismiss = () => this._dismiss(card, "dismiss");
 
-        // Keyboard: focus inside an action toast holds its timer (the mouse
-        // pause's twin), Escape dismisses it. Where focus came from is kept
-        // so it can return there when the card leaves under it.
-        if (act) {
-            card.addEventListener("focusin", (e) => {
-                if (!card._focusReturn && e.relatedTarget && !card.contains(e.relatedTarget)) {
-                    card._focusReturn = e.relatedTarget;
-                }
-                card._focused = true;
-                this._clearTimer(card);
-            });
-            card.addEventListener("focusout", (e) => {
-                if (card.contains(e.relatedTarget)) return;
-                card._focused = false;
-                this._startTimer(card);
-            });
-            card.addEventListener("keydown", (e) => {
-                if (e.key !== "Escape") return;
-                e.stopPropagation();
-                this._dismiss(card, "close");
-            });
-        }
+        // Keyboard: focus inside ANY toast (its action or its ×) holds the
+        // timer — the mouse pause's twin — and Escape there dismisses it.
+        // Where focus came from is kept so it can return there when the card
+        // leaves under it.
+        card.addEventListener("focusin", (e) => {
+            if (!card._focusReturn && e.relatedTarget && !card.contains(e.relatedTarget)) {
+                card._focusReturn = e.relatedTarget;
+            }
+            card._focused = true;
+            this._clearTimer(card);
+        });
+        card.addEventListener("focusout", (e) => {
+            if (card.contains(e.relatedTarget)) return;
+            card._focused = false;
+            this._startTimer(card);
+        });
+        card.addEventListener("keydown", (e) => {
+            if (e.key !== "Escape") return;
+            e.stopPropagation();
+            this._dismiss(card, "close");
+        });
 
         // Pause while pointed at (mouse) or held (touch, pen). Pointer events
         // filtered by type, not mouseenter: a tap fires compat mouseenter
@@ -243,7 +251,7 @@ class SacToastStack extends HTMLElement {
 
     _startTimer(card) {
         this._clearTimer(card);
-        // A focused action toast stays until focus leaves it.
+        // A focused toast stays until focus leaves it.
         if (card._duration > 0 && !card._leaving && !card._focused) {
             card._timer = setTimeout(() => this._dismiss(card, "timeout"), card._duration);
         }
@@ -462,6 +470,11 @@ class SacToastStack extends HTMLElement {
                     color: var(--text);
                     background: var(--hover);
                 }
+                /* Press: answers the moment it goes down. */
+                .close:active:not(:disabled) {
+                    background: var(--hover-strong);
+                    transition-duration: 0s;
+                }
                 .close:focus-visible {
                     outline: 2px solid var(--accent);
                     outline-offset: 1px;
@@ -487,6 +500,12 @@ class SacToastStack extends HTMLElement {
                     transition: background 120ms var(--ease-smooth);
                 }
                 .action:hover { background: var(--accent-tint); }
+                /* Press: no box at rest, so the tint deepens the moment it
+                   goes down (16% → 26%) instead of a scale. */
+                .action:active:not(:disabled) {
+                    background: color-mix(in srgb, var(--accent) 26%, transparent);
+                    transition-duration: 0s;
+                }
                 .action:focus-visible {
                     outline: 2px solid var(--accent);
                     outline-offset: 1px;
@@ -574,6 +593,31 @@ class SacToastStack extends HTMLElement {
                     .close,
                     .action { transition: none; }
                 }
+
+                /* Reduced transparency / more contrast: the card turns solid
+                   (the glass hue, nothing shining through) and drops the
+                   blur; the kind tint stays, a layer of its own on top. */
+                @media (prefers-reduced-transparency: reduce) {
+                    .toast {
+                        background:
+                            linear-gradient(color-mix(in srgb, var(--kind) 6%, transparent),
+                                            color-mix(in srgb, var(--kind) 6%, transparent)),
+                            var(--glass-solid);
+                        backdrop-filter: none;
+                        -webkit-backdrop-filter: none;
+                    }
+                }
+                @media (prefers-contrast: more) {
+                    .toast {
+                        background:
+                            linear-gradient(color-mix(in srgb, var(--kind) 6%, transparent),
+                                            color-mix(in srgb, var(--kind) 6%, transparent)),
+                            var(--glass-solid);
+                        backdrop-filter: none;
+                        -webkit-backdrop-filter: none;
+                        border-color: var(--border-contrast);
+                    }
+                }
             </style>
             <div class="region" id="region" role="region" aria-live="polite" aria-label="${L.region}"></div>
         `;
@@ -586,6 +630,14 @@ SacToastStack.KINDS = {
     success: "success",
     warn:    "warn",
     error:   "error",
+};
+
+/** Default lifetime in ms when add() gets no `duration`: error 10 s, warn
+ *  8 s, a toast with an action 8 s, everything else 4 s. */
+SacToastStack.defaultDuration = (kind, hasAction) => {
+    if (kind === "error") return 10000;
+    if (kind === "warn" || hasAction) return 8000;
+    return 4000;
 };
 
 customElements.define("sac-toast-stack", SacToastStack);

@@ -16,6 +16,9 @@
  *                 chosen inside #/scope/SLUG/… stays in that workspace (the
  *                 <sac-nav> rule). A prefix route ("#/files/*") navigates
  *                 to its prefix. External links open in a new tab, unscoped.
+ *                 A route bound to the other kind of workspace (register's
+ *                 scope: "root"/"scoped") is left out; a route with `open`
+ *                 (a window app) runs it instead of navigating.
  *   2. Commands — everything registered on sac.commands (below), grouped by
  *                 each command's `group` (default "Commands"). An app owns
  *                 its toolbar, so toolbar actions it wants keyboard-reachable
@@ -386,6 +389,8 @@
             if (router && typeof router.routes === "function") {
                 for (const route of router.routes()) {
                     if (!route || !route.label || route.palette === false) continue;
+                    // Not in this workspace (scope: "root"/"scoped") — not here either.
+                    if (router.inScope && !router.inScope(route)) continue;
                     const group = typeof route.palette === "function" ? route.palette()
                         : route.palette || t("palette.group-views", "Views");
                     const hash = route.hash;
@@ -402,7 +407,9 @@
                         // In-app hashes stay inside the active scoped
                         // workspace — the rule <sac-nav> follows for its
                         // links. Resolved when run, not when collected.
-                        run:   isExternal
+                        run:   route.open
+                            ? () => route.open(route)
+                            : isExternal
                             ? () => window.open(hash, "_blank", "noopener")
                             : () => router.navigate(scopedHash(hash)),
                     });
@@ -829,6 +836,14 @@
                         background: var(--accent-tint);
                         color: var(--accent);
                     }
+                    /* Press: answers the moment it goes down. The row under a
+                       mouse is the selected one (mouseenter selects), so its
+                       tint deepens and it stays the accent row; a row pressed
+                       before it is selected (a finger) gets the wash. */
+                    .row:active:not([aria-selected="true"]) { background: var(--hover-strong); }
+                    .row[aria-selected="true"]:active {
+                        background: color-mix(in srgb, var(--accent) 26%, transparent);
+                    }
 
                     .ico {
                         flex: none;
@@ -889,14 +904,17 @@
 
                     /* Scrollbar theme — duplicated because the global rule in
                        ui.css doesn't pierce Shadow DOM. */
-                    .list::-webkit-scrollbar { width: 8px; }
+                    .list::-webkit-scrollbar { width: calc(8px + 2 * var(--scrollbar-gap)); }
                     .list::-webkit-scrollbar-track { background: transparent; }
                     .list::-webkit-scrollbar-thumb {
                         background: var(--scrollbar-thumb);
+                        background-clip: content-box;
+                        border: var(--scrollbar-gap) solid transparent;
                         border-radius: 999px;
                     }
                     .list::-webkit-scrollbar-thumb:hover {
                         background: var(--scrollbar-thumb-hover);
+                        background-clip: content-box;
                     }
 
                     /* Compact: a full-width sheet hanging from the top edge,
@@ -928,6 +946,19 @@
                             opacity: 1;
                             transform: none;
                         }
+                    }
+
+                    /* Reduced transparency / more contrast: the panel turns
+                       solid (the glass hue, nothing shining through) and drops
+                       the blur. The backdrop is a scrim — it keeps its dim and
+                       only loses the blur. */
+                    @media (prefers-reduced-transparency: reduce) {
+                        .backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
+                        .panel { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
+                    }
+                    @media (prefers-contrast: more) {
+                        .backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
+                        .panel { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; border-color: var(--border-contrast); }
                     }
                 </style>
                 <div class="backdrop" part="backdrop"></div>

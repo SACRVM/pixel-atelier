@@ -31,14 +31,20 @@
  * paragraph, always via textContent (callers may pass user-sourced text).
  *
  * confirm() resolves with the clicked button's `action` string, or `null` if
- * the dialog was dismissed via Escape / backdrop / programmatic close.
+ * the dialog was dismissed via Escape / backdrop / swipe / programmatic close.
  * Callers treat `null` the same as "cancel." info() is the one-button case —
  * announce, not ask — so its resolution carries no information.
+ *
+ * The edit guard of <sac-dialog> applies to all three: once a field in the
+ * body has been edited (a prompt's text typed in), a backdrop tap or a
+ * swipe-down no longer dismisses — Escape and Cancel still do.
  *
  * prompt() is confirm() with one text field: { title, message?, label?,
  * value?, placeholder?, validate?, select?, buttons? }. It resolves with the
  * field's text when the PRIMARY button (kind "primary", else the last one)
- * runs, and `null` on any other button, Escape or the backdrop. Enter in the
+ * runs, and `null` on any other button, Escape, or the backdrop / a
+ * swipe-down while the field is untouched (typed in, those two leave the
+ * prompt open — a stray tap never throws the text away). Enter in the
  * field presses the primary button. `validate(value)` returns an error
  * string or null; while it returns a string the primary button is disabled
  * and the error shows under the field (from the first keystroke on — an
@@ -77,11 +83,12 @@
     function show(dlg, onOpen) {
         return new Promise((resolve) => {
             dlg.addEventListener("sac:action", (e) => {
-                // Let the fade-out transition run before removal.
-                setTimeout(() => {
+                // The exit plays first (the sheet slides down, the dialog
+                // fades); sac:closed says it is over.
+                dlg.addEventListener("sac:closed", () => {
                     dlg.remove();
                     resolve(e.detail.action);
-                }, 120);
+                }, { once: true });
             }, { once: true });
 
             document.body.appendChild(dlg);
@@ -186,7 +193,9 @@
                 if (check()) dlg.trigger(primary);
             });
             // The primary never closes over an invalid value — not via a
-            // click, not via trigger() from code.
+            // click, not via trigger() from code. Dismissals ask too
+            // (action null) and always pass: the edit guard already keeps
+            // a typed text from a stray backdrop tap or swipe.
             dlg.beforeAction = (action) => action !== primary || check();
 
             // An error built with sac.t() follows a language switch.
