@@ -466,7 +466,8 @@
         return doc;
     }
 
-    /** A dialog built from markup; resolves with { action, dlg } and removes itself. */
+    /** A dialog built from markup; resolves with { action, dlg } at once and
+     *  removes itself once its exit has played (sac:closed). */
     function dialog(title, html, buttons, setup) {
         const dlg = document.createElement("sac-dialog");
         dlg.setAttribute("title", title);
@@ -474,11 +475,10 @@
         dlg.innerHTML = html;
         document.body.appendChild(dlg);
         if (setup) setup(dlg);
+        dlg.addEventListener("sac:closed", (e) => { if (e.target === dlg) dlg.remove(); });
         return new Promise((resolve) => {
             dlg.addEventListener("sac:action", (e) => {
-                if (e.target !== dlg) return;
-                resolve({ action: e.detail.action, dlg });
-                setTimeout(() => dlg.remove(), 150);
+                if (e.target === dlg) resolve({ action: e.detail.action, dlg });
             });
             setTimeout(() => dlg.open(), 0);
         });
@@ -973,6 +973,10 @@
             this.tool = t;
             this.$tools.value = t;
             this.$canvas.style.cursor = t === "pick" ? "copy" : "";
+            // A touch long-press is a right-click kit-wide (2.29). A finger
+            // held still paints or picks, so only the marquee tool keeps the
+            // long-press menu (copy, cut, flip … for what it selected).
+            this.$canvas.toggleAttribute("data-no-long-press", t !== "select");
             this._syncBrushBox();
             this._saveSettings();
         }
@@ -1141,7 +1145,7 @@
                 const res = await decodeFile(image);
                 const w = Math.min(res.width, this.doc.w), h = Math.min(res.height, this.doc.h);
                 this._paste({ data: new Uint8ClampedArray(res.g.getImageData(0, 0, w, h).data), w, h, x: 0, y: 0 });
-            } catch { this._toast(L("t.unreadable")); }
+            } catch { this._toast(L("t.unreadable"), "error"); }
         }
 
         /* ---------------------------------------------------- frames ------ */
@@ -1311,7 +1315,7 @@
          */
         async _loadPalette() {
             const files = this._ctx.files;
-            if (!files) { this._toast(L("t.noFiles")); return; }
+            if (!files) { this._toast(L("t.noFiles"), "error"); return; }
             const picked = await files.open({ accept: ".gpl,.hex,.txt,image/*", title: L("d.loadPalette") });
             if (!picked) return;
             let colors = [];
@@ -1333,7 +1337,7 @@
                     colors = [...new Set(colors)].slice(0, 256);
                 }
             } catch { colors = []; }
-            if (!colors.length) { this._toast(L("t.noColors", { name: picked.name })); return; }
+            if (!colors.length) { this._toast(L("t.noColors", { name: picked.name }), "warn"); return; }
             this.doc.palette = colors;
             this.palMode = "all";
             this._buildPalette();
@@ -1381,7 +1385,8 @@
             const parts = [this.file && this.file.name, `${d.w}×${d.h}`, n > 1 && `${n} ${L("hud.frames")}`, `${this.$canvas.zoom}×`];
             this.querySelector(".pa-meta").textContent = parts.filter(Boolean).join(" · ") + (this._dirty ? " •" : "");
         }
-        _toast(msg) { if (window.sac && sac.toast) sac.toast(msg); }
+        /** kind "error" / "warn" when something did not happen: those stay longer (10 s / 8 s). */
+        _toast(msg, kind) { if (window.sac && sac.toast) sac.toast(msg, kind ? { kind } : undefined); }
 
         /* ---------------------------------------------------- history ----- */
 
@@ -1510,7 +1515,7 @@
 
         async _open() {
             const files = this._ctx.files;
-            if (!files) { this._toast(L("t.noFiles")); return; }
+            if (!files) { this._toast(L("t.noFiles"), "error"); return; }
             if (!(await this._discardOk())) return;
             const picked = await files.open({ accept: ".png,image/png,image/*", title: L("d.openTitle") });
             if (picked) this._openFile(picked.file, picked);
@@ -1519,11 +1524,11 @@
         /** Open any image: ours comes back whole, anything else is split into frames on request. */
         async _openFile(file, ref) {
             let res;
-            try { res = await decodeFile(file); } catch { this._toast(L("t.unreadable")); return; }
+            try { res = await decodeFile(file); } catch { this._toast(L("t.unreadable"), "error"); return; }
             const n = res.meta ? res.meta.frames : await this._askFrames(res.width, res.height, ref.name);
             if (!n) return;
             if (res.width / n > MAX_SIDE || res.height > MAX_SIDE) {
-                this._toast(L("t.tooBig", { n: MAX_SIDE }));
+                this._toast(L("t.tooBig", { n: MAX_SIDE }), "error");
                 return;
             }
             // Save writes PNG: a handle to anything else would overwrite it with one.
@@ -1556,7 +1561,7 @@
         /** Save = back through the handle; Save as (or no handle yet) asks. */
         async _save(asNew) {
             const files = this._ctx.files;
-            if (!files) { this._toast(L("t.noFiles")); return; }
+            if (!files) { this._toast(L("t.noFiles"), "error"); return; }
             this._commitFloat();
             const blob = await encodeDoc(this.doc, this._bufOf());
             const saved = await files.save(blob, {
